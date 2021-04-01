@@ -138,4 +138,72 @@ public:
     resetStatus();
   }
 
-  void objectLocationCB(const geometry_msgs::PoseStampedConstPtr &
+  void objectLocationCB(const geometry_msgs::PoseStampedConstPtr &lo)
+  {
+    if (!as_.isActive() || goal_mode_ !=  g_object || !trigger_)
+      return;
+    location_.header = lo->header;
+    location_.pose = lo->pose;
+  }
+
+  void objectCB(const geometry_msgs::PoseStampedConstPtr &ps)
+  {
+    getStatus();
+    if (!as_.isActive() || goal_mode_ !=  g_object || !trigger_)
+      return;
+
+    if (ps->pose.position.z == 0)
+      return;
+
+    if (status_feedback_ == f_failed)
+    {
+      pubInfo("Vision Action: Failed to find target in current scene!");
+      as_.setAborted(result_);
+    }
+    else
+    {
+      if (status_feedback_ != f_success)
+        return;
+
+      result_.target_pose.header = ps->header;
+      result_.target_pose.pose = ps->pose;
+
+      // result_.target_location = location_;
+      result_.target_location.pose.position = ps->pose.position;
+      result_.target_location.pose.orientation.w = 1;
+
+      pubInfo("Vision Action: Object recognition succeeded.");
+      as_.setSucceeded(result_);
+    }
+    resetStatus();
+  }
+
+private:
+  // main switch, true if the goal has been received
+  bool trigger_;
+
+  // goal
+  string param_action_target_set;
+  string param_action_target_label;
+  string param_action_need_recognize_face;
+
+  // overall feedback
+  int status_feedback_;
+  string param_vision_feedback;
+
+  // result
+  geometry_msgs::PoseStamped location_;
+};
+
+
+int main(int argc, char** argv)
+{
+  ros::init(argc, argv, "drv_action");
+
+  VisionAction action(ros::this_node::getName());
+  ros::spin();
+
+  return 0;
+}
+
+
