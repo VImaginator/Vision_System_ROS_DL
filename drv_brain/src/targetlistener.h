@@ -36,4 +36,12 @@ private:
    * @param label
    * Label formats:     Meanings
    * bottle             target to be searched
-   * name:Wang          name to be added 
+   * name:Wang          name to be added (by face training method)
+   * train:face         train on face data
+   * Notice that target label has no ':'
+   * @return 
+   */
+  bool checkLabel(string label);
+};
+
+#endif // TARGETLISTENER_H
