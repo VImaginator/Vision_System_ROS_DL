@@ -54,4 +54,17 @@
     
     <!-- Grasp image creation -->
     <param name="create_image_batches" value="false" /> <!-- creates grasp images in batches (less memory usage) -->
-    <param name="remove_plane_before_image_calc
+    <param name="remove_plane_before_image_calculation" value="false" /> <!-- removes table plane from point cloud to speed up shadow computations -->
+    
+    <!-- Clustering of grasps -->
+    <param name="min_inliers" value="1" />
+        
+    <!-- Grasp selection -->
+    <param name="min_score_diff" value="0" />
+    <param name="min_aperture" value="0.029" />
+    <param name="max_aperture" value="0.072" />
+    <param name="num_selected" value="5" />
+        
+	</node>
+  
+</launch>
