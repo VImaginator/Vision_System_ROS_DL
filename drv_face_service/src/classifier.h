@@ -63,4 +63,11 @@ private:
   // Size of the input images.
   Size input_geometry_;
 
-  // Number of image 
+  // Number of image channels: normally either 1 (gray) or 3 (bgr).
+  int num_channels_;
+
+  // Mean image, used to make the input 0-mean.
+  Mat mean_;
+};
+
+#endif // CLASSIFIER_H
