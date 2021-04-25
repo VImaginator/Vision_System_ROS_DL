@@ -28,3 +28,9 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 catkin_package()
+
+include_directories(${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
+
+add_executable(drv_face_client ${SRC_LIST})
+
+target_link_libraries(drv_face_client ${catkin_LIBRARIES} ${OpenCV_LIBS})
