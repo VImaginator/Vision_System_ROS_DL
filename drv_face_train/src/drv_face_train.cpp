@@ -100,4 +100,148 @@ bool checkAuthority()
   char hex[SHA512_DIGEST_LENGTH * 2];
   // make the request
   rosauth::Authentication srv;
-  srv.request.mac = string
+  srv.request.mac = string(hex);
+  srv.request.rand = rand;
+  srv.request.t = now;
+  srv.request.level = user_level;
+  srv.request.end = end;
+  
+  if (!cl_auth_.call(srv)) {
+    ROS_ERROR("Face train: Authentication server not actived.");
+    return false;
+  }
+  else {
+    if (!srv.response.authenticated)
+      ROS_ERROR_THROTTLE(9, "Face train: Password is not correct.");
+  }
+  return srv.response.authenticated;
+}
+
+void saveCurrentName()
+{
+  nameVec_.clear();
+  currNameId_ = 0;
+  string file = drv_path_ + "names.txt";
+  if (!boost::filesystem::exists(file)) {
+    std::ofstream outfile(file.c_str());
+    outfile << faceName_;
+    nameVec_.push_back(faceName_);
+    outfile.close();
+  }
+  else {
+    ifstream infile(file.c_str());
+    string line;
+    
+    bool repeated = false;
+    while (getline(infile, line)) {
+      nameVec_.push_back(line);
+      
+      if (line == faceName_) {
+        ROS_WARN("Current name is already exist!");
+        repeated = true;
+      }
+      else
+        currNameId_++;
+    }
+    infile.close();
+    
+    if (!repeated) {
+      ofstream outfile(file.c_str(), ofstream::app);
+      outfile << endl << faceName_;
+      nameVec_.push_back(faceName_);
+      outfile.close();
+    }
+  }
+}
+
+void generateTrainList()
+{
+  /* Train list is a file list which contains lines in such format:
+    /path/to/image.jpg image_label
+    example:
+    /caffe/data/images/8.jpg 1
+  */
+  string train_list = drv_path_ + "train.txt";
+  // Cover original training file with trunc
+  ofstream outfile(train_list.c_str(), ofstream::trunc);
+  // image_num_ is total training image num for one person
+  for (size_t k = 0; k < image_num_; ++k) {
+    for (size_t i = 0; i < nameVec_.size(); ++i) {
+      outfile << image_path_ << i << "/" << k << ".jpg " << i << endl;
+    }
+  }
+  outfile.close();
+}
+
+void saveImage(Mat image, int num)
+{
+  std::stringstream ss;
+  ss << num;
+  string save_dir = image_path_ + ss.str() + "/";
+  if (!boost::filesystem::exists(save_dir)) {
+    boost::filesystem::create_directories(save_dir);
+  }
+  
+  std::stringstream ssc;
+  ssc << imageCount_;
+  imwrite(save_dir + ssc.str() + ".jpg", image);
+}
+
+void imageCallback(const sensor_msgs::ImageConstPtr & image_msg)
+{
+  if (modeType_ != m_wander || !nameAdded_)
+    return;
+  
+  imagePtr_ = cv_bridge::toCvCopy(image_msg, "bgr8");
+  
+  if (!imagePtr_->image.cols) {
+    ROS_ERROR("Face train: No image message recieved.");
+    return;
+  }
+  
+  if (fd_.getOneFace(imagePtr_->image, faceROI_)) {
+    // If captured image contains only one face, save it
+    if (!faceROI_.empty()) {
+      imshow("Face image", faceROI_);
+      waitKey(10);
+    }
+    saveImage(faceROI_, currNameId_);
+    ROS_INFO("Face image number %d captured.", imageCount_);
+    imageCount_++;
+    
+    /* If captured image reached demanded number, 
+     * stop capturing and try starting training */
+    if (imageCount_ == image_num_) {
+      ROS_INFO("Capturing face image finished.");
+      resetStatus();
+
+      ros::param::set(param_face_need_train_, true);
+    }
+  }
+}
+
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "face_train_client");
+  
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh("~");
+  
+  // Get training image number of one person
+  pnh.getParam("image_num", image_num_);
+  pnh.getParam("need_authentication_id", need_authority_);
+  
+  ros::NodeHandle inh;
+  ros::NodeHandle rgb_nh(nh, "rgb");
+  ros::NodeHandle rgb_pnh(inh, "rgb");
+  ImageTransport it_rgb_sub(rgb_nh);
+  TransportHints hints_rgb("compressed", ros::TransportHints(), rgb_pnh);
+  Subscriber sub_rgb = it_rgb_sub.subscribe("/vision/rgb/image_rect_color",
+                                            1, imageCallback, hints_rgb);
+  
+  faceTrainPubStatus_ = nh.advertise<std_msgs::Bool>("status/face/train/feedback", 1);
+  
+  cl_auth_ = nh.serviceClient<rosauth::Authentication>("authenticate");
+  ros::ServiceClient client = nh.serviceClient<drv_msgs::face_train>("face_train_service");
+  
+  ROS_INFO("Ready 
