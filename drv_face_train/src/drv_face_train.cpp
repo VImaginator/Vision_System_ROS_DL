@@ -244,4 +244,82 @@ int main(int argc, char **argv)
   cl_auth_ = nh.serviceClient<rosauth::Authentication>("authenticate");
   ros::ServiceClient client = nh.serviceClient<drv_msgs::face_train>("face_train_service");
   
-  ROS_INFO("Ready 
+  ROS_INFO("Ready to train the face recognition network.");
+  
+  while (ros::ok()) {
+    if (ros::param::has(param_running_mode))
+      ros::param::get(param_running_mode, modeType_);
+    
+    if (modeType_ != m_wander) {
+      resetStatus();
+      continue;
+    }
+    
+    if (ros::param::has(param_face_train_name_)) {
+      ros::param::get(param_face_train_name_, faceName_);
+      ros::param::del(param_face_train_name_);
+    }
+    
+    if (faceName_ != "") {
+      /* faceName is not null means the user wants to add 
+         a new person to the dataset, so
+         check if the request have authority */
+      if (need_authority_ && !authenticated_) {
+        ros::param::get(param_password_, password_);
+        if (!checkAuthority()) {
+          resetStatus();
+          continue;
+        }
+        else
+          authenticated_ = true;
+      }
+      
+      /* If authentication is passed, check whether the name 
+       * has been added, the added name will be retrained */
+      if (!nameAdded_) {
+        // If faceName has not been added, add it to name.txt
+        // and generate training file
+        saveCurrentName();
+        generateTrainList();
+        
+        // Reset faceName after generating files needed
+        faceName_ = "";
+        nameAdded_ = true;
+        ROS_INFO("Name added, start capturing face.");
+      }
+    }
+    
+    ros::spinOnce();
+    
+    bool needTrain = false;
+    // After capturing all images, defaultly set needTrain=true
+    if (ros::param::has(param_face_need_train_)) {
+      ros::param::get(param_face_need_train_, needTrain);
+    }
+    
+    if (needTrain) {
+      // Call training service
+      drv_msgs::face_train srv;
+      
+      bool faceTrainResult = false;
+      if (client.call(srv)) {
+        faceTrainResult = true;
+        ROS_INFO("Face train: Finished training of face data.");
+      }
+      else {
+        faceTrainResult = false;
+        ROS_ERROR("Failed to call face train service.");
+      }
+      
+      std_msgs::Bool flag;
+      flag.data = faceTrainResult;
+      faceTrainPubStatus_.publish(flag);
+      
+      // Reset status if training successed
+      resetStatus();
+      ros::param::set(param_face_need_train_, false);
+      faceTrainResult = false;
+    }
+  }
+  return 0;
+}
