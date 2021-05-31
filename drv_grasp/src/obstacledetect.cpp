@@ -132,4 +132,126 @@ bool ObstacleDetect::detectPutTable(geometry_msgs::PoseStamped &put_pose,
 bool ObstacleDetect::getSourceCloud()
 {
   while (ros::ok()) {
-    if (!src_cloud_->po
+    if (!src_cloud_->points.empty())
+      return true;
+    
+    // Handle callbacks and sleep for a small amount of time
+    // before looping again
+    ros::spinOnce();
+    ros::Duration(0.005).sleep();
+  }
+}
+
+void ObstacleDetect::detectObstacleTable()
+{
+  getSourceCloud();
+  findMaxPlane();
+  
+  // Get table geometry from hull and publish the plane with max area
+  analyseObstacle();
+}
+
+void ObstacleDetect::detectObstacleInCloud(int min_x, int min_y, 
+                                           int max_x, int max_y)
+{
+  if (src_cloud_->points.empty())
+    return;
+  
+  assert(src_cloud_->points.size() == src_z_inliers_->indices.size());
+  
+  PointCloudMono::Ptr cloud_except_obj(new PointCloudMono);
+  pcl::PointIndices::Ptr idx_obj(new pcl::PointIndices);
+  
+  for (size_t i = 0; i < src_z_inliers_->indices.size(); ++i) {
+    int c = src_z_inliers_->indices[i] % 640;
+    int r = src_z_inliers_->indices[i] / 640;
+    if (c > min_x && c < max_x && r > min_y && r < max_y)
+      idx_obj->indices.push_back(i);
+  }
+  // Set negtive=true to get cloud id not equal to idx_obj
+  Utilities::getCloudByInliers(src_cloud_, cloud_except_obj, idx_obj, 
+                               true, false);
+  publishCloud(cloud_except_obj, pub_exp_obj_cloud_);
+}
+
+void ObstacleDetect::detectObstacleInDepth(int min_x, int min_y, 
+                                           int max_x, int max_y)
+{
+  cv_bridge::CvImagePtr rgb, depth;
+  sensor_msgs::CameraInfo info;
+  fi_->fetchRGBD(rgb, depth, info);
+  Mat depth_except_obj = depth->image;
+  for (size_t r = 0; r < depth_except_obj.rows; ++r) {
+    for (size_t c = 0; c < depth_except_obj.cols; ++c) {
+      if (c > min_x && c < max_x && r > min_y && r < max_y) {
+        // The type of depth image is CV_32F
+        depth_except_obj.at<float>(r, c) = 0.0;
+      }
+    }
+  }
+  cv_bridge::CvImage cv_img;
+  cv_img.image = depth_except_obj;
+  cv_img.header = info.header;
+  cv_img.encoding = depth->encoding;
+  
+  pub_depth_cam_info_.publish(info);
+  pub_exp_obj_depth_.publish(cv_img.toImageMsg());
+}
+
+void ObstacleDetect::findMaxPlane()
+{
+  if (src_cloud_->points.empty())
+    return;
+  
+  // Clear temp
+  planeZVector_.clear();
+  plane_coeff_.clear();
+  plane_hull_.clear();
+  global_area_temp_ = 0.0;
+  global_height_temp_ = 0.0;
+  
+  // Calculate the normal of source cloud
+  PointCloudRGBN::Ptr src_norm(new PointCloudRGBN);
+  Utilities::estimateNormCurv(src_cloud_, src_norm, 2*th_leaf_, th_leaf_, true);
+  
+  // Extract all points whose norm indicates that the point belongs to plane
+  pcl::PointIndices::Ptr idx_norm_ok(new pcl::PointIndices);
+  Utilities::getCloudByNormZ(src_norm, idx_norm_ok, th_z_norm_);
+  
+  if (idx_norm_ok->indices.empty()) {
+    ROS_DEBUG("ObstacleDetect: No point have the right normal of plane.");
+    return;
+  }
+  
+  PointCloudRGBN::Ptr cloud_norm_ok(new PointCloudRGBN);
+  Utilities::getCloudByInliers(src_norm, cloud_norm_ok, idx_norm_ok, false, false);
+  
+  ROS_DEBUG("Points may from plane: %d", cloud_norm_ok->points.size());
+  
+  // Prepare curv data for clustering
+  pcl::PointCloud<pcl::Normal>::Ptr norm_plane_curv(new pcl::PointCloud<pcl::Normal>);
+  norm_plane_curv->resize(cloud_norm_ok->size());
+  
+  size_t i = 0;
+  for (PointCloudRGBN::const_iterator pit = cloud_norm_ok->begin();
+       pit != cloud_norm_ok->end(); ++pit) {
+    norm_plane_curv->points[i].normal_x = pit->normal_x;
+    norm_plane_curv->points[i].normal_y = pit->normal_y;
+    norm_plane_curv->points[i].normal_z = pit->normal_z;
+    ++i;
+  }
+  // Perform clustering, cause the scene may contain multiple planes
+  calRegionGrowing(cloud_norm_ok, norm_plane_curv);
+  
+  // Extract each plane from the points having similar z value,
+  // the planes are stored in vector plane_hull_
+  extractPlaneForEachZ(cloud_norm_ok);
+}
+
+template <typename PointTPtr>
+void ObstacleDetect::publishCloud(PointTPtr cloud, ros::Publisher pub)
+{
+  sensor_msgs::PointCloud2 ros_cloud;
+  pcl::toROSMsg(*cloud, ros_cloud);
+  ros_cloud.header.frame_id = base_frame_;
+  ros_cloud.header.stamp = ros::Time(0)
