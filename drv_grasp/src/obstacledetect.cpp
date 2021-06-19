@@ -365,4 +365,114 @@ void ObstacleDetect::analyseObstacle()
   tf2::Quaternion q;
   q.setEuler(0, 0, yaw); // Notice the last angle is around Z axis
   table_pose.pose.orientation.x = q.x();
-  table_pose.pose
+  table_pose.pose.orientation.y = q.y();
+  table_pose.pose.orientation.z = q.z();
+  table_pose.pose.orientation.w = q.w();
+  
+  pub_table_pose_.publish(table_pose);
+  
+  publishCloud(cloud, pub_table_points_);
+  ROS_INFO_THROTTLE(11, "ObstacleDetect: Table detected.");
+}
+
+void ObstacleDetect::projectCloud(pcl::ModelCoefficients::Ptr coeff_in, 
+                                  PointCloudMono::Ptr cloud_in, 
+                                  PointCloudMono::Ptr &cloud_out)
+{
+  pcl::ProjectInliers<pcl::PointXYZ> proj;
+  proj.setModelType(pcl::SACMODEL_PLANE);
+  proj.setInputCloud(cloud_in);
+  proj.setModelCoefficients(coeff_in);
+  proj.filter(*cloud_out);
+}
+
+void ObstacleDetect::extractPlaneForEachZ(PointCloudRGBN::Ptr cloud_in)
+{
+  for (vector<float>::iterator cit = planeZVector_.begin(); 
+       cit != planeZVector_.end(); cit++) {
+    extractPlane(*cit, cloud_in);
+  }
+}
+
+void ObstacleDetect::extractPlane(float z_in, PointCloudRGBN::Ptr cloud_in)
+{
+  pcl::ModelCoefficients::Ptr coeff(new pcl::ModelCoefficients);
+  // Plane function: ax + by + cz + d = 0, here coeff[3] = d = -cz
+  coeff->values.push_back(0.0);
+  coeff->values.push_back(0.0);
+  coeff->values.push_back(1.0);
+  coeff->values.push_back(-z_in);
+  
+  // Use original cloud as input, get projected cloud for clustering
+  PointCloudMono::Ptr cloud_projected_surface(new PointCloudMono);
+  Utilities::cutCloud(coeff, th_deltaz_, cloud_in, cloud_projected_surface);
+  
+  // Since there may be multiple plane around z, we need do clustering
+  vector<pcl::PointIndices> cluster_indices;
+  Utilities::clusterExtract(cloud_projected_surface, cluster_indices, th_ratio_, 0, 307200);
+  
+  ROS_DEBUG("Plane cluster number: %d", cluster_indices.size());
+  
+  for (vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); 
+       it != cluster_indices.end (); ++it) {
+    PointCloudMono::Ptr cloud_near_z(new PointCloudMono);
+    for (vector<int>::const_iterator pit = it->indices.begin(); 
+         pit != it->indices.end(); ++pit)
+      cloud_near_z->points.push_back(cloud_projected_surface->points[*pit]);
+    
+    cloud_near_z->width = cloud_near_z->points.size();
+    cloud_near_z->height = 1;
+    cloud_near_z->is_dense = true;
+    
+    if (cloud_near_z->points.size() < 3)
+      continue;
+    
+    PointCloudMono::Ptr cloud_hull(new PointCloudMono);
+    pcl::ConvexHull<pcl::PointXYZ> hull;
+    hull.setInputCloud(cloud_near_z);
+    hull.setComputeAreaVolume(true);
+    hull.reconstruct(*cloud_hull);
+    float area_hull = hull.getTotalArea();
+    
+    if (cloud_hull->points.size() > 3 && area_hull > th_area_) {
+      /* Select the plane which has similar th_height and
+       * largest plane to be the output, notice that z_in is in base_link frame
+       * th_height_ is the height of table, base_link is 0.4m above the ground */
+      if (area_hull > global_area_temp_ && z_in > global_height_temp_ &&
+          fabs(z_in + base_link_above_ground_ - table_height_) < th_height_) {
+        plane_max_hull_ = cloud_hull;
+        plane_max_coeff_ = coeff;
+        // Update temp
+        global_height_temp_ = z_in;
+        global_area_temp_ = area_hull;
+      }
+      ROS_DEBUG("Found plane with area %f.", area_hull);
+      plane_coeff_.push_back(coeff);
+      plane_hull_.push_back(cloud_hull);
+    }
+  }
+}
+
+float ObstacleDetect::getCloudZMean(PointCloudMono::Ptr cloud_in)
+{
+  // Remove the fariest point in each loop
+  PointCloudMono::Ptr cloud_local_temp (new PointCloudMono);
+  PointCloudMono::Ptr cloud_temp (new PointCloudMono);
+  cloud_temp = cloud_in;
+  
+  float mid, zrange;
+  while (cloud_temp->points.size() > 2) {
+    float dis_high = 0.0;
+    float dis_low = 0.0;
+    int max_high = -1;
+    int max_low = -1;
+    pcl::PointIndices::Ptr pointToRemove(new pcl::PointIndices);
+    Utilities::getAverage(cloud_temp, mid, zrange);
+    if (zrange <= th_deltaz_)
+      break;
+    
+    // remove both upper and bottom points
+    size_t ct = 0;
+    for (PointCloudMono::const_iterator pit = cloud_temp->begin();
+         pit != cloud_temp->end();++pit) {
+      float dis = pit->z - mid
