@@ -475,4 +475,99 @@ float ObstacleDetect::getCloudZMean(PointCloudMono::Ptr cloud_in)
     size_t ct = 0;
     for (PointCloudMono::const_iterator pit = cloud_temp->begin();
          pit != cloud_temp->end();++pit) {
-      float dis = pit->z - mid
+      float dis = pit->z - mid;
+      if (dis - dis_high >= th_leaf_) {
+        dis_high = dis;
+        max_high = ct;
+      }
+      if (dis - dis_low <= - th_leaf_) {
+        dis_low = dis;
+        max_low = ct;
+      }
+      ct++;
+    }
+    if (max_low < 0 && max_high < 0)
+      break;
+    if (max_high >= 0)
+      pointToRemove->indices.push_back(max_high);
+    if (max_low >= 0)
+      pointToRemove->indices.push_back(max_low);
+    
+    Utilities::getCloudByInliers(cloud_temp, cloud_local_temp, 
+                                 pointToRemove, true, false);
+    cloud_temp = cloud_local_temp;
+  }
+  return mid;
+}
+
+void ObstacleDetect::calRegionGrowing(PointCloudRGBN::Ptr cloud, 
+                                      pcl::PointCloud<pcl::Normal>::Ptr normals)
+{
+  if (cloud->points.empty()) {
+    ROS_DEBUG("ObstacleDetect: Norm cloud contains nothing.");
+    return;
+  }
+  
+  pcl::RegionGrowing<pcl::PointXYZRGBNormal, pcl::Normal> reg;
+  pcl::search::Search<pcl::PointXYZRGBNormal>::Ptr tree = boost::shared_ptr<pcl::search::Search<pcl::PointXYZRGBNormal> > 
+      (new pcl::search::KdTree<pcl::PointXYZRGBNormal>);
+  
+  reg.setMinClusterSize(30);
+  reg.setMaxClusterSize(307200);
+  reg.setSearchMethod(tree);
+  reg.setNumberOfNeighbours(20);
+  reg.setInputCloud(cloud);
+  //reg.setIndices (indices);
+  reg.setInputNormals(normals);
+  reg.setSmoothnessThreshold(th_smooth_ / 180.0 * M_PI);
+  //reg.setCurvatureThreshold (0);
+  
+  vector<pcl::PointIndices> clusters;
+  reg.extract(clusters);
+  
+  // Region grow tire the whole cloud apart, process each part 
+  // to see if they come from the same plane
+  getMeanZofEachCluster(clusters, cloud);
+}
+
+void ObstacleDetect::getMeanZofEachCluster(vector<pcl::PointIndices> indices_in, 
+                                           PointCloudRGBN::Ptr cloud_in)
+{
+  if (indices_in.empty())
+    ROS_DEBUG("ObstacleDetect: Region growing get nothing.");
+  
+  else {
+    size_t k = 0;
+    for (vector<pcl::PointIndices>::const_iterator it = indices_in.begin(); 
+         it != indices_in.end(); ++it) {
+      PointCloudRGBN::Ptr cloud_fit_part(new PointCloudRGBN);
+      int count = 0;
+      for (vector<int>::const_iterator pit = it->indices.begin(); 
+           pit != it->indices.end(); ++pit) {
+        cloud_fit_part->points.push_back(cloud_in->points[*pit]);
+        count++;
+      }
+      // Reassemble the cloud part
+      cloud_fit_part->width = cloud_fit_part->points.size ();
+      cloud_fit_part->height = 1;
+      cloud_fit_part->is_dense = true;
+      
+      // Search those part which may come from the same plane
+      PointCloudMono::Ptr cloud_fit_part_t(new PointCloudMono);
+      Utilities::pointTypeTransfer(cloud_fit_part, cloud_fit_part_t);
+      
+      float z_value_of_plane_part = getCloudZMean(cloud_fit_part_t);
+      planeZVector_.push_back(z_value_of_plane_part);
+      k++;
+    }
+    
+    if (planeZVector_.empty()) {
+      ROS_DEBUG("processEachInliers: No cloud part pass the z judgment.");
+    }
+    else {
+      ROS_DEBUG("Probability plane number: %d", planeZVector_.size());
+      // Small to large
+      sort(planeZVector_.begin(), planeZVector_.end());
+    }
+  }
+}
