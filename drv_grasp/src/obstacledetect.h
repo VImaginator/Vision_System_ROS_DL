@@ -177,4 +177,66 @@ private:
   float th_area_;
   
   // Distance between base_frame and ground
-  fl
+  float base_link_above_ground_;
+  
+  // Graspable area center xy in base_link frame
+  float grasp_area_x_;
+  float grasp_area_y_;
+  float tolerance_;
+  // Distance between object center and base
+  float z_offset_;
+  
+  float global_area_temp_;
+  float global_height_temp_;
+  
+  vector<pcl::ModelCoefficients::Ptr> plane_coeff_;
+  vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> plane_hull_;
+  
+  pcl::ModelCoefficients::Ptr plane_max_coeff_;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr plane_max_hull_;
+  
+  vector<float> planeZVector_;
+  vector<float> planeCollectVector_;
+  
+  void findMaxPlane();
+  void analyseObstacle();
+  
+  /**
+   * @brief analysePutPose
+   * @param put_pose If grasp area center already in hull, use it as put_pose
+   * @param ref_pose The nearest point on hull from grasp area center
+   * @return true if need move the robot
+   */
+  bool analysePutPose(geometry_msgs::PoseStamped &put_pose, 
+                      geometry_msgs::PoseStamped &ref_pose);
+  
+  void projectCloud(pcl::ModelCoefficients::Ptr coeff_in, PointCloudMono::Ptr cloud_in, 
+                    PointCloudMono::Ptr &cloud_out);
+  
+  float getCloudZMean(PointCloudMono::Ptr cloud_in);
+  void getMeanZofEachCluster(std::vector<pcl::PointIndices> indices_in, 
+                             PointCloudRGBN::Ptr cloud_in);
+  
+  void calRegionGrowing(PointCloudRGBN::Ptr cloud, pcl::PointCloud<pcl::Normal>::Ptr normals);
+  
+  /**
+   * @brief extractPlaneForEachZ
+   * Merge clouds which from the same plane with equal z value
+   * @param cloud_in source cloud
+   */
+  void extractPlaneForEachZ(PointCloudRGBN::Ptr cloud_in);
+  
+  /**
+   * @brief extractPlane extract points which have similar z value
+   * @param z_in target z value
+   * @param cloud_in source point cloud
+   */
+  void extractPlane(float z_in, PointCloudRGBN::Ptr cloud_in);
+  
+  
+  template <typename PointTPtr>
+  void publishCloud(PointTPtr cloud, ros::Publisher pub);
+  bool getSourceCloud();
+};
+
+#endif // OBSTACLEDETECT_H
