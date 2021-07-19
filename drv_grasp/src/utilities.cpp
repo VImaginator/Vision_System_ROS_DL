@@ -98,4 +98,118 @@ void Utilities::pointTypeTransfer(PointCloudRGBN::Ptr cloud_in,
   }
 }
 
-void Utilities::cutCloud(pcl::ModelCoefficients::Pt
+void Utilities::cutCloud(pcl::ModelCoefficients::Ptr coeff_in, float th_distance,
+                         PointCloudRGBN::Ptr cloud_in, 
+                         PointCloudMono::Ptr &cloud_out)
+{
+  vector<int> inliers_cut;
+  Eigen::Vector4f coeffs(coeff_in->values[0], coeff_in->values[1],
+      coeff_in->values[2], coeff_in->values[3]);
+  
+  PointCloudMono::Ptr cloudSourceFiltered_t(new PointCloudMono);
+  pointTypeTransfer(cloud_in, cloudSourceFiltered_t);
+  pcl::SampleConsensusModelPlane<pcl::PointXYZ> scmp(cloudSourceFiltered_t);
+  scmp.selectWithinDistance(coeffs, th_distance, inliers_cut);
+  scmp.projectPoints(inliers_cut, coeffs, *cloud_out, false);
+}
+
+void Utilities::clusterExtract(PointCloudMono::Ptr cloud_in, 
+                               vector<pcl::PointIndices> &cluster_indices,
+                               float th_cluster, int minsize, int maxsize)
+{
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+  pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+  ec.setClusterTolerance(th_cluster);
+  ec.setMinClusterSize(minsize); // should be small, let area judge
+  ec.setMaxClusterSize(maxsize);
+  ec.setSearchMethod(tree);
+  ec.setInputCloud(cloud_in);
+  ec.extract(cluster_indices);
+}
+
+void Utilities::rotateCloudXY(PointCloudRGBN::Ptr cloud_in, PointCloudRGBN::Ptr &cloud_out,
+                              float rx, float ry, Eigen::Matrix4f &transform_inv)
+{
+  Eigen::Matrix4f transform_x = Eigen::Matrix4f::Identity();
+  Eigen::Matrix4f transform_y = Eigen::Matrix4f::Identity();
+  Eigen::Matrix4f transform_ = Eigen::Matrix4f::Identity();
+  
+  //the math function cos etc. operate angle in radius
+  transform_x(1,1) = cos(rx);
+  transform_x(2,1) = -sin(rx);
+  transform_x(1,2) = sin(rx);
+  transform_x(2,2) = cos(rx);
+  //		std::cout << "trans x: "<< transform_x << std::endl;
+  
+  transform_y(0,0) = cos(ry);
+  transform_y(0,2) = -sin(ry);
+  transform_y(2,0) = sin(ry);
+  transform_y(2,2) = cos(ry);
+  //		std::cout << "trans y: "<< transform_y << std::endl;
+  
+  transform_ = transform_y * transform_x;
+  //		std::cout << "total trans: "<< transform_ << std::endl;
+  transform_inv = transform_.inverse();
+  //		std::cout << "trans_inv: "<< transform_inv << std::endl;
+  
+  // Executing the transformation
+  pcl::transformPointCloudWithNormals(*cloud_in, *cloud_out, transform_);
+}
+
+void Utilities::rotateBack(PointCloudMono::Ptr cloud_in, PointCloudMono::Ptr &cloud_out,
+                           Eigen::Matrix4f transform_inv)
+{
+  // Executing the transformation
+  pcl::transformPointCloud(*cloud_in, *cloud_out, transform_inv);
+}
+
+void Utilities::getAverage(PointCloudMono::Ptr cloud_in, 
+                           float &avr, float &deltaz)
+{
+  avr = 0.0;
+  deltaz = 0.0;
+  size_t sz = cloud_in->points.size();
+  for (PointCloudMono::const_iterator pit = cloud_in->begin();
+       pit != cloud_in->end(); ++pit)
+    avr += pit->z;
+  
+  avr = avr / sz;
+  
+  pcl::PointXYZ minPt, maxPt;
+  pcl::getMinMax3D(*cloud_in, minPt, maxPt);
+  deltaz = maxPt.z - minPt.z;
+}
+
+void Utilities::getCloudByNormZ(PointCloudRGBN::Ptr cloud_in, 
+                                pcl::PointIndices::Ptr &inliers, 
+                                float th_norm)
+{
+  size_t i = 0;
+  for (PointCloudRGBN::const_iterator pit = cloud_in->begin();
+       pit != cloud_in->end();++pit) {
+    float n_z = pit->normal_z;
+    // If point normal fulfill this criterion, consider it from plane
+    // Here we use absolute value cause
+    if (fabs(n_z) > th_norm)
+      inliers->indices.push_back(i);
+    ++i;
+  }
+}
+
+void Utilities::getCloudByZ(PointCloudMono::Ptr cloud_in, 
+                            pcl::PointIndices::Ptr &inliers, 
+                            PointCloudMono::Ptr &cloud_out, 
+                            float z_min, float z_max)
+{
+  // Create the filtering object
+  pcl::PassThrough<pcl::PointXYZ> pass;
+  pass.setInputCloud(cloud_in);
+  pass.setFilterFieldName("z");
+  pass.setFilterLimits(z_min, z_max);
+  //pass.setFilterLimitsNegative (true);
+  pass.filter(inliers->indices);
+  pass.filter(*cloud_out);
+}
+
+void Utilities::getCloudByInliers(PointCloudMono::Ptr cloud_in, 
+            
