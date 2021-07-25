@@ -212,4 +212,113 @@ void Utilities::getCloudByZ(PointCloudMono::Ptr cloud_in,
 }
 
 void Utilities::getCloudByInliers(PointCloudMono::Ptr cloud_in, 
-            
+                                  PointCloudMono::Ptr &cloud_out,
+                                  pcl::PointIndices::Ptr inliers, 
+                                  bool negative, bool organized)
+{
+  pcl::ExtractIndices<pcl::PointXYZ> extract;
+  extract.setNegative(negative);
+  extract.setInputCloud(cloud_in);
+  extract.setIndices(inliers);
+  extract.setKeepOrganized(organized);
+  extract.filter(*cloud_out);
+}
+
+void Utilities::getCloudByInliers(PointCloudRGBN::Ptr cloud_in, 
+                                  PointCloudRGBN::Ptr &cloud_out,
+                                  pcl::PointIndices::Ptr inliers, 
+                                  bool negative, bool organized)
+{
+  pcl::ExtractIndices<pcl::PointXYZRGBNormal> extract;
+  extract.setNegative(negative);
+  extract.setInputCloud(cloud_in);
+  extract.setIndices(inliers);
+  extract.setKeepOrganized(organized);
+  extract.filter (*cloud_out);
+}
+
+void Utilities::shrinkHull(PointCloudMono::Ptr cloud, 
+                           PointCloudMono::Ptr &cloud_sk, float dis)
+{
+  pcl::PointXYZ minPt, maxPt;
+  pcl::getMinMax3D(*cloud, minPt, maxPt);
+  
+  size_t i = 0;
+  float center_x = (maxPt.x + minPt.x) / 2;
+  float center_y = (maxPt.y + minPt.y) / 2;
+  for (PointCloudMono::const_iterator pit = cloud->begin(); 
+       pit != cloud->end(); ++pit) {
+    if (pit->x == center_x) {
+      if (pit->y > center_y) {
+        cloud_sk->points[i].y = (pit->y - dis)>center_y?(pit->y - dis):pit->y;
+      }
+      else {
+        cloud_sk->points[i].y = (pit->y + dis)<center_y?(pit->y + dis):pit->y;
+      }
+      cloud_sk->points[i].x = pit->x;
+    }
+    else {
+      float d_x = pit->x - center_x;
+      float d_y = pit->y - center_y;
+      float theta = atan(d_y/d_x);
+      if (d_x > 0 && d_y >= 0) {
+        cloud_sk->points[i].x = (pit->x - fabs(dis*sin(theta)))>center_x?
+              (pit->x - fabs(dis*sin(theta))):pit->x;
+        cloud_sk->points[i].y = (pit->y - fabs(dis*cos(theta)))>center_y?
+              (pit->y - fabs(dis*cos(theta))):pit->y;
+      }
+      else if (d_x < 0 && d_y >= 0) {
+        cloud_sk->points[i].x = (pit->x + fabs(dis*sin(theta)))<center_x?
+              (pit->x + fabs(dis*sin(theta))):pit->x;
+        cloud_sk->points[i].y = (pit->y - fabs(dis*cos(theta)))>center_y?
+              (pit->y - fabs(dis*cos(theta))):pit->y;
+      }
+      else if (d_x < 0 && d_y < 0) {
+        cloud_sk->points[i].x = (pit->x + fabs(dis*sin(theta)))<center_x?
+              (pit->x + fabs(dis*sin(theta))):pit->x;
+        cloud_sk->points[i].y = (pit->y + fabs(dis*cos(theta)))<center_y?
+              (pit->y + fabs(dis*cos(theta))):pit->y;
+      }
+      else {
+        cloud_sk->points[i].x = (pit->x - fabs(dis*sin(theta)))>center_x?
+              (pit->x - fabs(dis*sin(theta))):pit->x;
+        cloud_sk->points[i].y = (pit->y + fabs(dis*cos(theta)))<center_y?
+              (pit->y + fabs(dis*cos(theta))):pit->y;
+      }
+    }
+  }
+}
+
+bool Utilities::isInHull(PointCloudMono::Ptr hull, pcl::PointXY p_in, 
+                         pcl::PointXY &offset, pcl::PointXY &p_closest)
+{
+  // Step 1: get cloest point of p_in in each sector
+  size_t i = 0;
+  bool has_sector_1 = false;
+  bool has_sector_2 = false;
+  bool has_sector_3 = false;
+  bool has_sector_4 = false;
+  float dis_1 = 10.0;
+  float dis_2 = 10.0;
+  float dis_3 = 10.0;
+  float dis_4 = 10.0;
+  pcl::PointXY p_1, p_2, p_3, p_4;
+  for (PointCloudMono::const_iterator pit = hull->begin(); 
+       pit != hull->end(); ++pit) {
+    float delta_x = pit->x - p_in.x;
+    float delta_y = pit->y - p_in.y;
+    float dis = sqrt(pow(delta_x, 2) + pow(delta_y, 2));
+    if (delta_x > 0 && delta_y > 0) {
+      has_sector_1 = true;
+      if (dis < dis_1) {
+        dis_1 = dis;
+        p_1.x = pit->x;
+        p_1.y = pit->y;
+      }
+    }
+    else if (delta_x <= 0 && delta_y > 0) {
+      has_sector_2 = true;
+      if (dis < dis_2) {
+        dis_2 = dis;
+        p_2.x = pit->x;
+        p_2.y 
