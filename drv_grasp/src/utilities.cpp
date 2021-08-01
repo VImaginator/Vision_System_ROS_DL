@@ -321,4 +321,136 @@ bool Utilities::isInHull(PointCloudMono::Ptr hull, pcl::PointXY p_in,
       if (dis < dis_2) {
         dis_2 = dis;
         p_2.x = pit->x;
-        p_2.y 
+        p_2.y = pit->y;
+      }
+    }
+    else if (delta_x <= 0 && delta_y <=0 ) {
+      has_sector_3 = true;
+      if (dis < dis_3) {
+        dis_3 = dis;
+        p_3.x = pit->x;
+        p_3.y = pit->y;
+      }
+    }
+    else {
+      has_sector_4 = true;
+      if (dis < dis_4) {
+        dis_4 = dis;
+        p_4.x = pit->x;
+        p_4.y = pit->y;
+      }
+    }
+    ++i;
+  }
+  if (has_sector_1 && has_sector_2 && has_sector_3 && has_sector_4) {
+    offset.x = 0;
+    offset.y = 0;
+    return true;
+  }
+  else {
+    pcl::PointXYZ minPt, maxPt;
+    pcl::getMinMax3D(*hull, minPt, maxPt);
+    pcl::PointXY p_c;
+    p_c.x = (minPt.x + maxPt.x)/2;
+    p_c.y = (minPt.y + maxPt.y)/2;
+    p_closest.x = p_in.x + 0.1 * (p_c.x - p_in.x);
+    p_closest.y = p_in.y + 0.1 * (p_c.y - p_in.y);
+    
+    offset.x = p_closest.x - p_in.x;
+    offset.y = p_closest.y - p_in.y;
+    return false;
+  }
+}
+
+bool Utilities::tryExpandROI(int &minx, int &miny, int &maxx, int &maxy, 
+                             int pad, int width, int height)
+{
+  if (minx >= maxx || miny >= maxy) {
+    return false;
+  }
+  minx -= pad;
+  maxx += pad;
+  miny -= pad;
+  maxy += pad;
+  if (minx < 0) minx = 0;
+  if (maxx > width) maxx = width - 1;
+  if (miny < 0) miny = 0;
+  if (maxy > height) maxy = height - 1;
+}
+
+float Utilities::determinant(float v1, float v2, float v3, float v4)
+{  
+  return (v1 * v3 - v2 * v4);  
+}  
+
+bool Utilities::isIntersect(pcl::PointXY p1, pcl::PointXY p2, 
+                            pcl::PointXY p3, pcl::PointXY p4)  
+{  
+  float delta = determinant(p2.x-p1.x, p3.x-p4.x, p2.y-p1.y, p3.y-p4.y);  
+  if ( delta<=(1e-6) && delta>=-(1e-6) ) {  
+    return false;  
+  }  
+  float lameda = determinant(p3.x-p1.x, p3.x-p4.x, p3.y-p1.y, p3.y-p4.y) / delta;  
+  if ( lameda > 1 || lameda < 0 ) {  
+    return false;  
+  }  
+  float miu = determinant(p2.x-p1.x, p3.x-p1.x, p2.y-p1.y, p3.y-p1.y) / delta;  
+  if ( miu > 1 || miu < 0 ) {  
+    return false;  
+  }  
+  return true;  
+} 
+
+void Utilities::getClosestPoint(pcl::PointXY p1, pcl::PointXY p2, 
+                                pcl::PointXY p, pcl::PointXY &pc)
+{
+  float A = p1.x - p2.x;
+  float B = p1.y - p2.y;
+  
+  if (A == 0) {
+    pc.x = p1.x;
+    pc.y = p.y;
+    return;
+  }
+  if (B == 0) {
+    pc.x = p.x;
+    pc.y = p1.y;
+    return;
+  }
+
+  //pc.x = (A*(A*p.x + B*p.y)/B - A*p1.y + B*p1.x)/(B + A*A/B);
+  //pc.y = B*(pc.x - p1.x)/A + p1.y;
+  
+  pc.y = (p.x - p1.x + A/B*p1.y + B/A*p.y)/(A/B + B/A);
+  pc.x = A/B*(pc.y - p1.y) + p1.x;
+}
+
+float Utilities::pointToSegDist(float x, float y, float x1, float y1, float x2, float y2)
+{
+  float cross = (x2 - x1) * (x - x1) + (y2 - y1) * (y - y1);
+  if (cross <= 0) 
+    return sqrt((x - x1) * (x - x1) + (y - y1) * (y - y1));
+  
+  float d2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+  if (cross >= d2) 
+    return sqrt((x - x2) * (x - x2) + (y - y2) * (y - y2));
+  
+  float r = cross / d2;
+  float px = x1 + (x2 - x1) * r;
+  float py = y1 + (y2 - y1) * r;
+  return sqrt((x - px) * (x - px) + (py - y) * (py - y));
+}
+
+void Utilities::smartOffset(pcl::PointXYZ &p_in, float off_xy, float off_z)
+{
+  //  float y_off = off_xy / sqrt(1 + pow(p_in.x / p_in.y, 2)) * p_in.y / fabs(p_in.y);
+  //  float x_off = p_in.x / p_in.y * y_off;
+  
+  float rad = atan2(p_in.y, p_in.x);
+  float y_off = off_xy * sin(rad);
+  float x_off = off_xy * cos(rad);  
+  p_in.x += x_off;
+  p_in.y += y_off;
+  // To solve the issue that the detected point is higher than optimal position
+  p_in.z += off_z;
+}
