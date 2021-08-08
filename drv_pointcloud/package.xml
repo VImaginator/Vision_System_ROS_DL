@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<package>
+  <name>drv_pointcloud</name>
+  <version>0.0.0</version>
+  <description>The drv_pointcloud package</description>
+
+  <!-- One maintainer tag required, multiple allowed, one person per tag --> 
+  <!-- Example:  -->
+  <!-- <m
