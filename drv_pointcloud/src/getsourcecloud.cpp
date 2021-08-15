@@ -48,4 +48,168 @@ float getDepth(
   //  | 2 | 4 | 2 |
   //  | 1 | 2 | 1 |
   int u_start = std::max(u-1, 0);
-  int v_start = s
+  int v_start = std::max(v-1, 0);
+  int u_end = std::min(u+1, depthImage.cols-1);
+  int v_end = std::min(v+1, depthImage.rows-1);
+
+  float depth = 0.0f;
+  if(isInMM)
+  {
+    if(depthImage.at<unsigned short>(v,u) > 0 &&
+       depthImage.at<unsigned short>(v,u) < std::numeric_limits<unsigned short>::max())
+    {
+      depth = float(depthImage.at<unsigned short>(v,u))*0.001f;
+    }
+  }
+  else
+  {
+    depth = depthImage.at<float>(v,u);
+  }
+
+  if((depth==0.0f || !uIsFinite(depth)) && estWithNeighborsIfNull)
+  {
+    // all cells no2 must be under the zError to be accepted
+    float tmp = 0.0f;
+    int count = 0;
+    for(int uu = u_start; uu <= u_end; ++uu)
+    {
+      for(int vv = v_start; vv <= v_end; ++vv)
+      {
+        if((uu == u && vv!=v) || (uu != u && vv==v))
+        {
+          float d = 0.0f;
+          if(isInMM)
+          {
+            if(depthImage.at<unsigned short>(vv,uu) > 0 &&
+               depthImage.at<unsigned short>(vv,uu) < std::numeric_limits<unsigned short>::max())
+            {
+              depth = float(depthImage.at<unsigned short>(vv,uu))*0.001f;
+            }
+          }
+          else
+          {
+            d = depthImage.at<float>(vv,uu);
+          }
+          if(d!=0.0f && uIsFinite(d))
+          {
+            if(tmp == 0.0f)
+            {
+              tmp = d;
+              ++count;
+            }
+            else if(fabs(d - tmp) < maxZError)
+            {
+              tmp+=d;
+              ++count;
+            }
+          }
+        }
+      }
+    }
+    if(count > 1)
+    {
+      depth = tmp/float(count);
+    }
+  }
+
+  if(depth!=0.0f && uIsFinite(depth))
+  {
+    if(smoothing)
+    {
+      float sumWeights = 0.0f;
+      float sumDepths = 0.0f;
+      for(int uu = u_start; uu <= u_end; ++uu)
+      {
+        for(int vv = v_start; vv <= v_end; ++vv)
+        {
+          if(!(uu == u && vv == v))
+          {
+            float d = 0.0f;
+            if(isInMM)
+            {
+              if(depthImage.at<unsigned short>(vv,uu) > 0 &&
+                 depthImage.at<unsigned short>(vv,uu) < std::numeric_limits<unsigned short>::max())
+              {
+                depth = float(depthImage.at<unsigned short>(vv,uu))*0.001f;
+              }
+            }
+            else
+            {
+              d = depthImage.at<float>(vv,uu);
+            }
+
+            // ignore if not valid or depth difference is too high
+            if(d != 0.0f && uIsFinite(d) && fabs(d - depth) < maxZError)
+            {
+              if(uu == u || vv == v)
+              {
+                sumWeights+=2.0f;
+                d*=2.0f;
+              }
+              else
+              {
+                sumWeights+=1.0f;
+              }
+              sumDepths += d;
+            }
+          }
+        }
+      }
+      // set window weight to center point
+      depth *= 4.0f;
+      sumWeights += 4.0f;
+
+      // mean
+      depth = (depth+sumDepths)/sumWeights;
+    }
+  }
+  else
+  {
+    depth = 0;
+  }
+  return depth;
+}
+
+
+pcl::PointXYZ projectDepthTo3D(
+    const cv::Mat & depthImage,
+    float x, float y,
+    float cx, float cy,
+    float fx, float fy,
+    bool smoothing,
+    float maxZError)
+{
+
+  pcl::PointXYZ pt;
+
+  float depth = getDepth(depthImage, x, y, smoothing, maxZError, true);
+  if(depth > 0.0f)
+  {
+    // Use correct principal point from calibration
+    cx = cx > 0.0f ? cx : float(depthImage.cols/2) - 0.5f; //cameraInfo.K.at(2)
+    cy = cy > 0.0f ? cy : float(depthImage.rows/2) - 0.5f; //cameraInfo.K.at(5)
+
+    // Fill in XYZ
+    pt.x = (x - cx) * depth / fx;
+    pt.y = (y - cy) * depth / fy;
+    pt.z = depth;
+  }
+  else
+  {
+    pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
+  }
+  return pt;
+}
+
+
+pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloudFromDepthRGB(const cv::Mat & imageRgb, const cv::Mat & imageDepth,
+                                                         float cx, float cy, float fx, float fy, float maxDepth, float minDepth)
+{
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+  bool mono;
+  if(imageRgb.channels() == 3) // BGR
+  {
+    mono = false;
+  }
+  el
