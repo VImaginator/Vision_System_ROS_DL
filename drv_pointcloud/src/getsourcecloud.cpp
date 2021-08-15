@@ -212,4 +212,85 @@ pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloudFromDepthRGB(const cv::Mat & imageRg
   {
     mono = false;
   }
-  el
+  else if(imageRgb.channels() == 1) // Mono
+  {
+    mono = true;
+  }
+  else
+  {
+    return cloud;
+  }
+
+  int decimation = 1;
+
+  //cloud.header = cameraInfo.header;
+  cloud->height = imageRgb.rows/decimation;
+  cloud->width  = imageRgb.cols/decimation;
+  cloud->is_dense = false;
+  cloud->resize(cloud->height * cloud->width);
+
+  float rgbToDepthFactorX = 1.0f/float((imageRgb.cols / imageDepth.cols));
+  float rgbToDepthFactorY = 1.0f/float((imageRgb.rows / imageDepth.rows));
+  float depthFx = fx * rgbToDepthFactorX;
+  float depthFy = fy * rgbToDepthFactorY;
+  float depthCx = cx * rgbToDepthFactorX;
+  float depthCy = cy * rgbToDepthFactorY;
+
+  int oi = 0;
+  for(int h = 0; h < imageRgb.rows && h/decimation < (int)cloud->height; h+=decimation)
+  {
+    for(int w = 0; w < imageRgb.cols && w/decimation < (int)cloud->width; w+=decimation)
+    {
+      pcl::PointXYZRGB & pt = cloud->at((h/decimation)*cloud->width + (w/decimation));
+      if(!mono)
+      {
+        pt.b = imageRgb.at<cv::Vec3b>(h,w)[0];
+        pt.g = imageRgb.at<cv::Vec3b>(h,w)[1];
+        pt.r = imageRgb.at<cv::Vec3b>(h,w)[2];
+      }
+      else
+      {
+        unsigned char v = imageRgb.at<unsigned char>(h,w);
+        pt.b = v;
+        pt.g = v;
+        pt.r = v;
+      }
+
+      pcl::PointXYZ ptXYZ = projectDepthTo3D(imageDepth, w*rgbToDepthFactorX, h*rgbToDepthFactorY, depthCx, depthCy, depthFx, depthFy, false,3.0);
+      if(pcl::isFinite(ptXYZ) && ptXYZ.z>=minDepth && (maxDepth<=0.0f || ptXYZ.z <= maxDepth))
+      {
+        pt.x = ptXYZ.x;
+        pt.y = ptXYZ.y;
+        pt.z = ptXYZ.z;
+        ++oi;
+      }
+      else
+      {
+        pt.x = pt.y = pt.z = std::numeric_limits<float>::quiet_NaN();
+      }
+    }
+  }
+  if(oi == 0)
+  {
+    PCL_WARN("Cloud with only NaN values created!\n");
+  }
+  return cloud;
+}
+
+bool GetSourceCloud::getCloud(cv::Mat color, cv::Mat depth, float fx, float fy, float cx, float cy, float maxDepth, float minDepth,
+                              pcl::PointCloud<pcl::PointXYZRGB>::Ptr  &cloudSource)
+{
+  if (color.empty())
+  {
+    std::cerr << "color image is empty" << std::endl;
+    return false;
+  }
+  if (depth.empty())
+  {
+    std::cerr << "depth image is empty" << std::endl;
+    return false;
+  }
+
+  cloudSource = cloudFromDepthRGB(color, depth, cx, cy, fx, fy, maxDepth, minDepth);
+  return true;
+}
