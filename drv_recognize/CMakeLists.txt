@@ -43,3 +43,27 @@ catkin_package()
 include_directories(
   ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR}
 )
+
+add_library (drv_recognize_lib
+ src/detectcolor.cpp
+ src/processdepth.cpp
+ src/refinedepth.cpp
+ src/transform.cpp
+ 
+ src/detectcolor.h
+ src/processdepth.h
+ src/refinedepth.h
+ src/transform.h
+)
+
+add_executable(drv_recognize_color src/drv_recognize_color.cpp)
+target_link_libraries(drv_recognize_lib ${catkin_LIBRARIES} ${OpenCV_LIBS} ${Caffe_LIBRARIES})
+target_link_libraries (drv_recognize_color drv_recognize_lib)
+
+add_executable(drv_recognize_hand src/drv_recognize_hand.cpp)
+target_link_libraries(drv_recognize_lib ${catkin_LIBRARIES} ${OpenCV_LIBS} ${PCL_LIBRARIES})
+target_link_libraries (drv_recognize_hand drv_recognize_lib)
+
+add_executable(drv_refine_depth src/drv_refine_depth.cpp)
+target_link_libraries(drv_recognize_lib ${catkin_LIBRARIES} ${OpenCV_LIBS} ${PCL_LIBRARIES})
+target_link_libraries (drv_refine_depth drv_recognize_lib)
