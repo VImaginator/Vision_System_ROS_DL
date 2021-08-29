@@ -86,4 +86,5 @@ def process(im):
 
     elapsed = timeit.default_timer() - start_time
 
-    p
+    print 'Detection took {:.3f}s for {:d} object proposals'.format(elapsed, boxes.shape[0])
+    return result
