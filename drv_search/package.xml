@@ -23,4 +23,14 @@
   <run_depend>cv_bridge</run_depend>
   <run_depend>drv_msgs</run_depend>
   <run_depend>geometry_msgs</run_depend>
-  <run_depend>pcl_ros</
+  <run_depend>pcl_ros</run_depend>
+  <run_depend>roscpp</run_depend>
+  <run_depend>rospy</run_depend>
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>std_msgs</run_depend>
+  <run_depend>tf</run_depend>
+
+  <export>
+
+  </export>
+</package>
