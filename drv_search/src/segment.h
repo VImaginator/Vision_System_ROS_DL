@@ -29,4 +29,4 @@ private:
     image_transport::Publisher pubImage_;
 };
 
-#endif //
+#endif // SEGMENT_H
