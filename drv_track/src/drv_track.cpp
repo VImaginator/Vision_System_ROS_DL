@@ -183,4 +183,112 @@ void imageCallback(const sensor_msgs::ImageConstPtr& image_msg)
     int d_x = roi.x + roi.width / 2 - 320;
     int d_y = roi.y + roi.height / 2 - 240;
     int deg_x = int(d_x * x_to_angle); // offset the robot head need to turn
-    int de
+    int deg_y = int(d_y * y_to_angle);
+    
+    isInTracking_ = true;
+    delay_ = WAIT_LOOP;
+    pubTarget(image_msg->header, mask_id, roi);
+    
+    if (abs(deg_x) < angle_step && abs(deg_y) < angle_step) {
+      isInTracking_ = true;
+      delay_ = WAIT_LOOP;
+      pubTarget(image_msg->header, mask_id, roi);
+      return;
+    }
+    if (abs(deg_x) >= angle_step && abs(deg_y) < angle_step) {
+      if (deg_x < -angle_step) deg_x = -angle_step;
+      if (deg_x > angle_step) deg_x = angle_step;
+      deg_y = 0;
+    }
+    if (abs(deg_x) < angle_step && abs(deg_y) >= angle_step) {
+      if (deg_y < -angle_step) deg_y = -angle_step;
+      if (deg_y > angle_step) deg_y = angle_step;
+      deg_x = 0;
+    }
+    if (abs(deg_x) >= angle_step && abs(deg_y) >= angle_step) {
+      if (deg_x < -angle_step) deg_x = -angle_step;
+      if (deg_x > angle_step) deg_x = angle_step;
+      if (deg_y < -angle_step) deg_y = -angle_step;
+      if (deg_y > angle_step) deg_y = angle_step;
+    }
+    int x_ang = - deg_x + yaw_;
+    int y_ang = - deg_y + pitch_;
+    
+    if (!(x_ang >= 0 && x_ang <= 180 && y_ang >= 60 && y_ang <= 140))
+    {
+      pubTarget(image_msg->header, mask_id, roi);
+      isInTracking_ = false;
+      ROS_WARN("Target out of camera view.\n");
+      GO.tracker_initialized_ = false;
+    }
+    else {
+      publishServo(y_ang, x_ang);
+    }
+  }
+  else
+  {
+    delay_--;
+    if (delay_ < 0)
+    {
+      isInTracking_ = false;
+      ROS_WARN("GOTURN lost the target.\n");
+      GO.tracker_initialized_ = false;
+    }
+  }
+}
+
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "drv_track");
+  
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh;
+  ros::NodeHandle rgb_nh(nh, "rgb");
+  ros::NodeHandle rgb_pnh(pnh, "rgb");
+  
+  image_transport::ImageTransport it_rgb_sub(rgb_nh);
+  image_transport::TransportHints hints_rgb("compressed", ros::TransportHints(), rgb_pnh);
+  
+  image_transport::ImageTransport it_rgb_pub(nh);
+  trackPubImage_ = it_rgb_pub.advertise("search/labeled_image", 1);
+  trackPubServo_ = nh.advertise<std_msgs::UInt16MultiArray>("servo", 1);
+  trackPubStatus_ = nh.advertise<std_msgs::Bool>("status/track/feedback", 1);
+  trackPubTarget_ = nh.advertise<drv_msgs::recognized_target>("track/recognized_target" , 1);
+  
+  ros::Subscriber sub_res = nh.subscribe<drv_msgs::recognized_target>("search/recognized_target", 1, resultCallback);
+  image_transport::Subscriber sub_rgb = it_rgb_sub.subscribe("image_raw", 1, imageCallback, hints_rgb);
+  ros::Subscriber sub_s = nh.subscribe<std_msgs::UInt16MultiArray>("servo", 1, servoCallback);
+  
+  if (ros::param::has(param_servo_pitch))
+    ros::param::get(param_servo_pitch, pitch_);
+  
+  if (ros::param::has(param_servo_yaw))
+    ros::param::get(param_servo_yaw, yaw_);
+  
+  ROS_INFO("Tracking function initialized!\n");
+  
+  while (ros::ok())
+  {
+    if (ros::param::has(param_running_mode))
+    {
+      ros::param::get(param_running_mode, modeTypeTemp_);
+      
+      if (modeTypeTemp_ != m_track && modeType_ == m_track)
+      {
+        GO.tracker_initialized_ = false;
+      }
+      modeType_ = modeTypeTemp_;
+    }
+    
+    std_msgs::Bool flag;
+    flag.data = true;
+    
+    ros::spinOnce();
+    
+    flag.data = isInTracking_;
+    trackPubStatus_.publish(flag);
+  }
+  
+  return 0;
+}
+
