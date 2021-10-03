@@ -34,4 +34,8 @@ private:
   Tracker tracker_;
   float color_mean_temp_;
 
-  void goInit(Mat img,
+  void goInit(Mat img, Rect gt);
+  Rect goTrack(Mat img);
+};
+
+#endif // GOTURN_H
