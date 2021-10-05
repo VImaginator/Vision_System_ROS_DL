@@ -125,4 +125,100 @@ void BoundingBox::Unscale(const cv::Mat& image, BoundingBox* bbox_unscaled) cons
   bbox_unscaled->y2_ /= scale_factor_;
 
   // Unscale the bounding box so that the coordinates match the original image coordinates
-  // (undoing the effect from the Scale 
+  // (undoing the effect from the Scale method).
+  bbox_unscaled->x1_ *= image_width;
+  bbox_unscaled->y1_ *= image_height;
+  bbox_unscaled->x2_ *= image_width;
+  bbox_unscaled->y2_ *= image_height;
+}
+
+double BoundingBox::compute_output_width() const {
+  // Get the bounding box width.
+  const double bbox_width = (x2_ - x1_);
+
+  // We pad the image by a factor of kContextFactor around the bounding box
+  // to include some image context.
+  const double output_width = kContextFactor * bbox_width;
+
+  // Ensure that the output width is at least 1 pixel.
+  return std::max(1.0, output_width);
+}
+
+double BoundingBox::compute_output_height() const {
+  // Get the bounding box height.
+  const double bbox_height = (y2_ - y1_);
+
+  // We pad the image by a factor of kContextFactor around the bounding box
+  // to include some image context.
+  const double output_height = kContextFactor * bbox_height;
+
+  // Ensure that the output height is at least 1 pixel.
+  return std::max(1.0, output_height);
+}
+
+double BoundingBox::get_center_x() const {
+  // Compute the bounding box center x-coordinate.
+  return (x1_ + x2_) / 2;
+}
+
+double BoundingBox::get_center_y() const {
+  // Compute the bounding box center y-coordinate.
+  return (y1_ + y2_) / 2;
+}
+
+void BoundingBox::Recenter(const BoundingBox& search_location,
+              const double edge_spacing_x, const double edge_spacing_y,
+              BoundingBox* bbox_gt_recentered) const {
+  // Location of bounding box relative to the focused image and edge_spacing.
+  bbox_gt_recentered->x1_ = x1_ - search_location.x1_ + edge_spacing_x;
+  bbox_gt_recentered->y1_ = y1_ - search_location.y1_ + edge_spacing_y;
+  bbox_gt_recentered->x2_ = x2_ - search_location.x1_ + edge_spacing_x;
+  bbox_gt_recentered->y2_ = y2_ - search_location.y1_ + edge_spacing_y;
+}
+
+void BoundingBox::Uncenter(const cv::Mat& raw_image,
+                           const BoundingBox& search_location,
+                           const double edge_spacing_x, const double edge_spacing_y,
+                           BoundingBox* bbox_uncentered) const {
+  // Undo the effect of Recenter.
+  bbox_uncentered->x1_ = std::max(0.0, x1_ + search_location.x1_ - edge_spacing_x);
+  bbox_uncentered->y1_ = std::max(0.0, y1_ + search_location.y1_ - edge_spacing_y);
+  bbox_uncentered->x2_ = std::min(static_cast<double>(raw_image.cols), x2_ + search_location.x1_ - edge_spacing_x);
+  bbox_uncentered->y2_ = std::min(static_cast<double>(raw_image.rows), y2_ + search_location.y1_ - edge_spacing_y);
+}
+
+double BoundingBox::edge_spacing_x() const {
+  const double output_width = compute_output_width();
+  const double bbox_center_x = get_center_x();
+
+  // Compute the amount that the output "sticks out" beyond the edge of the image (edge effects).
+  // If there are no edge effects, we would have output_width / 2 < bbox_center_x, but if the crop is near the left
+  // edge of the image then we would have output_width / 2 > bbox_center_x, with the difference
+  // being the amount that the output "sticks out" beyond the edge of the image.
+  return std::max(0.0, output_width / 2 - bbox_center_x);
+}
+
+double BoundingBox::edge_spacing_y() const {
+  const double output_height = compute_output_height();
+  const double bbox_center_y = get_center_y();
+
+  // Compute the amount that the output "sticks out" beyond the edge of the image (edge effects).
+  // If there are no edge effects, we would have output_height / 2 < bbox_center_y, but if the crop is near the bottom
+  // edge of the image then we would have output_height / 2 > bbox_center_y, with the difference
+  // being the amount that the output "sticks out" beyond the edge of the image.
+  return std::max(0.0, output_height / 2 - bbox_center_y);
+}
+
+void BoundingBox::Draw(const int r, const int g, const int b,
+                       cv::Mat* image) const {
+  // Get the top-left point.
+  const cv::Point point1(x1_, y1_);
+
+  // Get the bottom-rigth point.
+  const cv::Point point2(x2_, y2_);
+
+  // Get the selected color.
+  const cv::Scalar box_color(b, g, r);
+
+  // Draw a rectangle corresponding to this bbox with the given color.
+ 
