@@ -221,4 +221,103 @@ void BoundingBox::Draw(const int r, const int g, const int b,
   const cv::Scalar box_color(b, g, r);
 
   // Draw a rectangle corresponding to this bbox with the given color.
- 
+  const int thickness = 3;
+  cv::rectangle(*image, point1, point2, box_color, thickness);
+}
+
+void BoundingBox::DrawBoundingBox(cv::Mat* image) const {
+  // Draw a white bounding box on the image.
+  Draw(255, 255, 255, image);
+}
+
+void BoundingBox::Shift(const cv::Mat& image,
+                        const double lambda_scale_frac,
+                        const double lambda_shift_frac,
+                        const double min_scale, const double max_scale,
+                        const bool shift_motion_model,
+                        BoundingBox* bbox_rand) const {
+  const double width = get_width();
+  const double height = get_height();
+
+  double center_x = get_center_x();
+  double center_y = get_center_y();
+
+  // Number of times to try shifting the bounding box.
+  const int kMaxNumTries = 10;
+
+  // Sample a width scaling factor for the new crop window, thresholding the scale to stay within a reasonable window.
+  double new_width = -1;
+  int num_tries_width = 0;
+  while ((new_width < 0 || new_width > image.cols - 1) && num_tries_width < kMaxNumTries) {
+    // Sample.
+    double width_scale_factor;
+    if (shift_motion_model) {
+      width_scale_factor = max(min_scale, min(max_scale, sample_exp_two_sided(lambda_scale_frac)));
+    } else {
+      const double rand_num = sample_rand_uniform();
+      width_scale_factor = rand_num * (max_scale - min_scale) + min_scale;
+    }
+    // Expand width by scaling factor.
+    new_width = width * (1 + width_scale_factor);
+    // Ensure that width stays within valid limits.
+    new_width = max(1.0, min(static_cast<double>(image.cols - 1), new_width));
+    num_tries_width++;
+  }
+
+  // Find a height scaling factor for the new crop window, thresholding the scale to stay within a reasonable window.
+  double new_height = -1;
+  int num_tries_height = 0;
+  while ((new_height < 0 || new_height > image.rows - 1) && num_tries_height < kMaxNumTries) {
+    // Sample.
+    double height_scale_factor;
+    if (shift_motion_model) {
+      height_scale_factor = max(min_scale, min(max_scale, sample_exp_two_sided(lambda_scale_frac)));
+    } else {
+      const double rand_num = sample_rand_uniform();
+      height_scale_factor = rand_num * (max_scale - min_scale) + min_scale;
+    }
+    // Expand height by scaling factor.
+    new_height = height * (1 + height_scale_factor);
+    // Ensure that height stays within valid limits.
+    new_height = max(1.0, min(static_cast<double>(image.rows - 1), new_height));
+    num_tries_height++;
+  }
+
+  // Find a random x translation for the new crop window.
+  bool first_time_x = true;
+  double new_center_x = -1;
+  int num_tries_x = 0;
+  while ((first_time_x ||
+         // Ensure that the new object center remains in the old image window.
+         new_center_x < center_x - width * kContextFactor / 2 ||
+         new_center_x > center_x + width * kContextFactor / 2 ||
+          // Ensure that the new window stays within the borders of the image.
+         new_center_x - new_width / 2 < 0 ||
+         new_center_x + new_width / 2 > image.cols)
+         && num_tries_x < kMaxNumTries) {
+    // Sample.
+    double new_x_temp;
+    if (shift_motion_model) {
+      new_x_temp = center_x + width * sample_exp_two_sided(lambda_shift_frac);
+    } else {
+      const double rand_num = sample_rand_uniform();
+      new_x_temp = center_x + rand_num * (2 * new_width) - new_width;
+    }
+    // Make sure that the window stays within the image.
+    new_center_x = min(image.cols - new_width / 2, max(new_width / 2, new_x_temp));
+    first_time_x = false;
+    num_tries_x++;
+  }
+
+  // Find a random y translation for the new crop window.
+  bool first_time_y = true;
+  double new_center_y = -1;
+  int num_tries_y = 0;
+  while ((first_time_y ||
+          // Ensure that the new object center remains in the old image window.
+         new_center_y < center_y - height * kContextFactor / 2 ||
+         new_center_y > center_y + height * kContextFactor / 2  ||
+          // Ensure that the new window stays within the borders of the image.
+         new_center_y - new_height / 2 < 0 ||
+         new_center_y + new_height / 2 > image.rows)
+         && num_tries_y 
