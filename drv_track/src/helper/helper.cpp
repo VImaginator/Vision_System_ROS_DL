@@ -108,4 +108,33 @@ void find_matching_files(const bfs::path& folder, const boost::regex filter,
       string filename = itr->path().filename().string();
 
       boost::smatch what;
-      if(boost::regex_match(filename, what, 
+      if(boost::regex_match(filename, what, filter) ) {
+        files->push_back(filename);
+      }
+    }
+  }
+
+  // Sort the files by name.
+  std::sort(files->begin(), files->end());
+}
+
+double sample_rand_uniform() {
+  // Generate a random number in (0,1)
+  // http://www.cplusplus.com/forum/beginner/7445/
+  return (rand() + 1) / (static_cast<double>(RAND_MAX) + 2);
+}
+
+double sample_exp(const double lambda) {
+  // Sample from an exponential - http://stackoverflow.com/questions/11491458/how-to-generate-random-numbers-with-exponential-distribution-with-mean
+  const double rand_uniform = sample_rand_uniform();
+  return -log(rand_uniform) / lambda;
+}
+
+double sample_exp_two_sided(const double lambda) {
+  // Determine which side of the two-sided exponential we are sampling from.
+  const double pos_or_neg = (rand() % 2 == 0) ? 1 : -1;
+
+  // Sample from an exponential - http://stackoverflow.com/questions/11491458/how-to-generate-random-numbers-with-exponential-distribution-with-mean
+  const double rand_uniform = sample_rand_uniform();
+  return log(rand_uniform) / lambda * pos_or_neg;
+}
