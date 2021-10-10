@@ -320,4 +320,33 @@ void BoundingBox::Shift(const cv::Mat& image,
           // Ensure that the new window stays within the borders of the image.
          new_center_y - new_height / 2 < 0 ||
          new_center_y + new_height / 2 > image.rows)
-         && num_tries_y 
+         && num_tries_y < kMaxNumTries) {
+    // Sample.
+    double new_y_temp;
+    if (shift_motion_model) {
+      new_y_temp = center_y + height * sample_exp_two_sided(lambda_shift_frac);
+    } else {
+      const double rand_num = sample_rand_uniform();
+      new_y_temp = center_y + rand_num * (2 * new_height) - new_height;
+    }
+    // Make sure that the window stays within the image.
+    new_center_y = min(image.rows - new_height / 2, max(new_height / 2, new_y_temp));
+    first_time_y = false;
+    num_tries_y++;
+  }
+
+  // Create a bounding box that matches the new sampled window.
+  bbox_rand->x1_ = new_center_x - new_width / 2;
+  bbox_rand->x2_ = new_center_x + new_width / 2;
+  bbox_rand->y1_ = new_center_y - new_height / 2;
+  bbox_rand->y2_ = new_center_y + new_height / 2;
+}
+
+double BoundingBox::compute_intersection(const BoundingBox& bbox) const {
+  const double area = std::max(0.0, std::min(x2_, bbox.x2_) - std::max(x1_, bbox.x1_)) * std::max(0.0, std::min(y2_, bbox.y2_) - std::max(y1_, bbox.y1_));
+  return area;
+}
+
+double BoundingBox::compute_area() const {
+  return get_width() * get_height();
+}
