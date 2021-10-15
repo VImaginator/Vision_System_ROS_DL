@@ -17,4 +17,4 @@ void CropPadImage(const BoundingBox& bbox_tight, const cv::Mat& image, cv::Mat* 
 // The cropped image location is also limited by the edge of the image.
 void ComputeCropPadImageLocation(const BoundingBox& bbox_tight, const cv::Mat& image, BoundingBox* pad_image_location);
 
-#
+#endif // IMAGE_PROC_H
