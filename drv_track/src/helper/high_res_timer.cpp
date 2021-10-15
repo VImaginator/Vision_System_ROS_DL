@@ -71,4 +71,59 @@ std::string HighResTimer::reportMicroseconds() const
 
 std::string HighResTimer::reportMilliseconds() const
 {
-  std::ostringstream oss; oss << description_ << ": " << getMilliseconds() <
+  std::ostringstream oss; oss << description_ << ": " << getMilliseconds() << " milliseconds.";
+  return oss.str();
+}
+
+std::string HighResTimer::reportSeconds() const
+{
+  std::ostringstream oss; oss << description_ << ": " << getSeconds() << " seconds.";
+  return oss.str();
+}
+
+std::string HighResTimer::reportMinutes() const
+{
+  std::ostringstream oss; oss << description_ << ": " << getMinutes() << " minutes.";
+  return oss.str();
+}
+
+std::string HighResTimer::reportHours() const
+{
+  std::ostringstream oss; oss << description_ << ": " << getHours() << " hours.";
+  return oss.str();
+}
+
+std::string HighResTimer::report() const
+{
+  double val = getMicroseconds();
+  if(val <= 1000.0)
+    return reportMicroseconds();
+
+  val /= 1000.0;
+  if(val <= 1000.0 && val >= 1.0)
+    return reportMilliseconds();
+
+  val /= 1000.0;
+  if(val <= 60.0 && val >= 1.0)
+    return reportSeconds();
+  
+  val /= 60.0;
+  if(val <= 60.0 && val >= 1.0)
+    return reportMinutes();
+  
+  val /= 60.0;
+  return reportHours();
+}
+
+ScopedTimer::ScopedTimer(const std::string& description) :
+  hrt_(description)
+{
+  hrt_.start();
+}
+
+ScopedTimer::~ScopedTimer()
+{
+  hrt_.stop();
+  std::cout << hrt_.report() << std::endl;
+}
+
