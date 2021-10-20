@@ -193,4 +193,100 @@ void LoaderImagenetDet::ComputeStatistics() const {
 
   int n = 0;
 
-  // Ite
+  // Iterate over all images.
+  for (size_t i = 0; i < images_.size(); ++i) {
+
+    // Iterate over all annotations.
+    const std::vector<Annotation>& annotations = images_[i];
+    for (size_t j = 0; j < annotations.size(); ++j) {
+
+      // Load the annotation information.
+      const Annotation& annotation = annotations[j];
+      const double width = annotation.bbox.get_width();
+      const double height = annotation.bbox.get_height();
+      const double image_width = annotation.display_width_;
+      const double image_height = annotation.display_height_;
+
+      // Compute the fraction of the image that this bounding box occupies.
+      const double width_frac = width / image_width;
+      const double height_frac = height / image_height;
+
+      // If this is the first annotation, then save the information for it.
+      if (first_time) {
+        min_width = width;
+        min_height = height;
+        max_width = width;
+        max_height = height;
+
+        min_width_frac = width_frac;
+        min_height_frac = height_frac;
+        max_width_frac = width_frac;
+        max_height_frac = height_frac;
+
+        first_time = false;
+      } else {
+        // Update our estimates of the smallest / largest for various measures:
+        // bounding box width / height,
+        // fraction of the image width / height occupied by the bounding box.
+        min_width = std::min(min_width, width);
+        min_height = std::min(min_height, height);
+        max_width = std::max(max_width, width);
+        max_height = std::max(max_height, height);
+
+        min_width_frac = std::min(min_width_frac, width_frac);
+        min_height_frac = std::min(min_height_frac, height_frac);
+        max_width_frac = std::max(max_width_frac, width_frac);
+        max_height_frac = std::max(max_height_frac, height_frac);
+      }
+      // Update our mean estimates.
+      mean_width = (static_cast<double>(n) * mean_width + width) / static_cast<double>(n + 1);
+      mean_height = (static_cast<double>(n) * mean_height + height) / static_cast<double>(n + 1);
+      mean_width_frac = (static_cast<double>(n) * mean_width_frac + width_frac) / static_cast<double>(n + 1);
+      mean_height_frac = (static_cast<double>(n) * mean_height_frac + height_frac) / static_cast<double>(n + 1);
+    }
+    n++;
+  }
+  // Print the image statistics for this dataset.
+  printf("Width: %lf %lf %lf\n", min_width, max_width, mean_width);
+  printf("Height: %lf %lf %lf\n", min_height, max_height, mean_height);
+  printf("Width frac: %lf %lf %lf\n", min_width_frac, max_width_frac, mean_width_frac);
+  printf("Height frac: %lf %lf %lf\n", min_height_frac, max_height_frac, mean_height_frac);
+  printf("Total: %d\n", n);
+}
+
+void LoaderImagenetDet::ShowAnnotations() const {
+  // Iterate over all images.
+  for (size_t i = 0; i < images_.size(); ++i) {
+
+    // Iterate over all annotations.
+    const std::vector<Annotation>& annotations = images_[i];
+    for (size_t j = 0; j < annotations.size(); ++j) {
+
+      // Load the image and annotation.
+      cv::Mat image;
+      BoundingBox bbox;
+      LoadAnnotation(i, j, &image, &bbox);
+      printf("Width: %lf, height: %lf\n", bbox.get_width(), bbox.get_height());
+
+      // Draw the annotation on the image.
+      bbox.DrawBoundingBox(&image);
+
+      // Display the image with the annotation.
+      cv::namedWindow( "Display window", cv::WINDOW_AUTOSIZE );// Create a window for display.
+      cv::imshow( "Display window", image );                   // Show our image inside it.
+      cv::waitKey(0);                                          // Wait for a keystroke in the window
+    }
+  }
+}
+
+void LoaderImagenetDet::LoadImage(const size_t image_num,
+                                  cv::Mat* image) const {
+  // Load the specified image's annotations.
+  const std::vector<Annotation>& annotations = images_[image_num];
+
+  // Load the first annotation for this image.
+  const int annotation_num = 0;
+  const Annotation& annotation = annotations[annotation_num];
+
+  // Load the specified image (using the file-path contained within the annotation).
+  const string& image_file = path_ + "/" + ann
