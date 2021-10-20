@@ -289,4 +289,105 @@ void LoaderImagenetDet::LoadImage(const size_t image_num,
   const Annotation& annotation = annotations[annotation_num];
 
   // Load the specified image (using the file-path contained within the annotation).
-  const string& image_file = path_ + "/" + ann
+  const string& image_file = path_ + "/" + annotation.image_path + ".JPEG";
+  *image = cv::imread(image_file.c_str());
+
+  // Check that we were able to load the image.
+  if (!image->data) {
+    printf("Could not open or find image %s\n", image_file.c_str());
+    return;
+  }
+}
+
+void LoaderImagenetDet::LoadAnnotation(const size_t image_num,
+                                       const size_t annotation_num,
+                                       cv::Mat* image,
+                                       BoundingBox* bbox) const {
+  // Load the specified image's annotations.
+  const std::vector<Annotation>& annotations = images_[image_num];
+  const Annotation& annotation = annotations[annotation_num];
+
+  // Load the specified image.
+  const string& image_file = path_ + "/" + annotation.image_path + ".JPEG";
+  *image = cv::imread(image_file.c_str());
+
+  // Check that we were able to load the image.
+  if (!image->data) {
+    printf("Could not open or find image %s\n", image_file.c_str());
+    return;
+  }
+
+  // Check if the dispay width / height differs from the image width / height (the image may have been
+  // downsampled for visualization).  Usually this value will be 1.
+  double factor = 1;
+  if (image->rows != annotation.display_height_ || image->cols != annotation.display_width_) {
+    printf("Image: %zu %zu %s\n", image_num, annotation_num, image_file.c_str());
+    printf("Image size: %d %d\n", image->rows, image->cols);
+    printf("Display size: %d %d\n", annotation.display_height_,
+           annotation.display_width_);
+
+    // Check that the aspect ratio was preserved for annotation.
+    factor = static_cast<double>(image->rows) / static_cast<double>(annotation.display_height_);
+    const double factor2 = static_cast<double>(image->cols) / static_cast<double>(annotation.display_width_);
+    printf("Factor: %lf %lf\n", factor, factor2);
+  }
+
+  // Scale the bounding box by the ratio of the the image size to the display size.
+  *bbox = annotation.bbox;
+  bbox->x1_ *= factor;
+  bbox->x2_ *= factor;
+  bbox->y1_ *= factor;
+  bbox->y2_ *= factor;
+}
+
+void LoaderImagenetDet::ShowAnnotationsRand() const {
+  while (true) {
+    // Choose a random image.
+    const int image_num = rand() % images_.size();
+
+    // Get the annotations for this image.
+    const std::vector<Annotation>& annotations = images_[image_num];
+
+    // Choose a random annotation.
+    const int annotation_num = rand() % annotations.size();
+
+    // Load the image and annotation.
+    cv::Mat image;
+    BoundingBox bbox;
+    LoadAnnotation(image_num, annotation_num, &image, &bbox);
+
+    // Show the full image with the bounding box.
+    cv::Mat image_copy;
+    image.copyTo(image_copy);
+    bbox.DrawBoundingBox(&image_copy);
+    cv::namedWindow( "Display window", cv::WINDOW_AUTOSIZE );// Create a window for display.
+    cv::imshow( "Display window", image_copy );                   // Show our image inside it.
+    cv::waitKey(0);                                          // Wait for a keystroke in the window
+  }
+}
+
+void LoaderImagenetDet::ShowAnnotationsShift() const {
+  // Create an example generator with parameters for a large shift, so that this will be noticable.
+  // This will be used to artificially shift the crops around the annotations, creating an
+  // apparent motion (via translation and scale change).
+  ExampleGenerator example_generator(5, 5, -0.4, 0.4);
+
+  const bool save_images = false;
+
+  // Iterate over all images.
+  for (size_t i = 0; i < images_.size(); ++i) {
+
+    // Iterate over all images.
+    const std::vector<Annotation>& annotations = images_[i];
+    for (size_t j = 0; j < annotations.size(); ++j) {
+      // Load the image and its annotation.
+      cv::Mat image;
+      BoundingBox bbox;
+      LoadAnnotation(i, j, &image, &bbox);
+
+      // Show the full image with the bounding box annotation.
+      cv::Mat image_copy;
+      image.copyTo(image_copy);
+      bbox.Draw(0, 255, 0, &image_copy);
+      cv::namedWindow( "Display window", cv::WINDOW_AUTOSIZE );// Create a window for display.
+ 
