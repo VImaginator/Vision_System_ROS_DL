@@ -390,4 +390,31 @@ void LoaderImagenetDet::ShowAnnotationsShift() const {
       image.copyTo(image_copy);
       bbox.Draw(0, 255, 0, &image_copy);
       cv::namedWindow( "Display window", cv::WINDOW_AUTOSIZE );// Create a window for display.
- 
+      cv::imshow( "Display window", image_copy );                   // Show our image inside it.
+
+      // If desired, save this image with its annotation.
+      if (save_images) {
+        const string image_name = "Image" + num2str(i) + "_" + num2str(j) + "full.jpg";
+        cv::imwrite(image_name, image_copy);
+      }
+
+      // Set up the example generator with this annotation.
+      example_generator.Reset(bbox, bbox, image, image);
+
+      // Save the image and annotation index so we can give this image a simple identifier.
+      example_generator.set_indices(i, j);
+
+      // Make a training example from randomly shifting the annotation and visualize it.
+      cv::Mat image_rand_focus;
+      cv::Mat target_pad;
+      BoundingBox bbox_gt_scaled;
+      const bool visualize = true;
+      const int kNumShifts = 1;
+      for (int k = 0; k < kNumShifts; ++k) {
+        example_generator.MakeTrainingExampleBBShift(visualize, &image_rand_focus,
+                                                     &target_pad, &bbox_gt_scaled);
+      }
+    }
+  }
+}
+
