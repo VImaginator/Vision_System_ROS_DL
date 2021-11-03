@@ -53,4 +53,38 @@ int main( int argc, char** argv)
     // Process the first frame
     const char* imagefile = vot_frame();
     if (!imagefile) {
-    
+        vot_quit();
+        exit(0);
+    }
+
+    for(f = 1;; f++)
+    {
+
+        // *****************************************
+        // VOT: Call vot_frame to get path of the 
+        //      current image frame. If the result is
+        //      null, the sequence is over.
+        // *****************************************
+        const char* imagefile = vot_frame();
+        if (!imagefile) break;
+
+        // *****************************************
+        // VOT: Report the position of the object 
+        //      every frame using vot_report function.
+        // *****************************************
+        vot_report(selection);
+
+        usleep(10000);
+
+    }
+
+    vot_region_release(&selection);
+
+    // *************************************
+    // VOT: Call vot_deinitialize at the end
+    // *************************************
+    vot_quit();
+
+    return 0;
+}
+
