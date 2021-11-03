@@ -130,4 +130,130 @@ __TRAX_EXPORT void trax_client_initialize(trax_handle* client, trax_image* image
 __TRAX_EXPORT void trax_client_frame(trax_handle* client, trax_image* image, trax_properties* properties);
 
 /**
- * Setups the prot
+ * Setups the protocol for the server side and returns a handle object.
+**/
+__TRAX_EXPORT trax_handle* trax_server_setup(trax_configuration config, FILE* log);
+
+/**
+ * Setups the protocol for the server side and returns a handle object.
+**/
+__TRAX_EXPORT trax_handle* trax_server_setup_file(trax_configuration config, int input, int output, FILE* log);
+
+/**
+ * Waits for a valid protocol message from the client.
+**/
+__TRAX_EXPORT int trax_server_wait(trax_handle* server, trax_image** image, trax_region** region, trax_properties* properties);
+
+/**
+ * Sends a status reply to the client.
+**/
+__TRAX_EXPORT void trax_server_reply(trax_handle* server, trax_region* region, trax_properties* properties);
+
+/**
+ * Used in client and server. Closes communication, sends quit message if needed.
+ * Releases the handle structure.
+**/
+__TRAX_EXPORT int trax_cleanup(trax_handle** handle);
+
+/**
+ * Sets the parameter for the client or server instance.
+**/
+__TRAX_EXPORT int trax_set_parameter(trax_handle* handle, int id, int value);
+
+/**
+ * Gets the parameter for the client or server instance.
+**/
+__TRAX_EXPORT int trax_get_parameter(trax_handle* handle, int id, int* value);
+
+/**
+ * Releases image structure, frees allocated memory.
+**/
+__TRAX_EXPORT void trax_image_release(trax_image** image);
+
+/**
+ * Creates a file-system path image description.
+**/
+__TRAX_EXPORT trax_image* trax_image_create_path(const char* path);
+
+/**
+ * Returns a file path from a file-system path image description. This function
+ * returns a pointer to the internal data which should not be modified.
+**/
+__TRAX_EXPORT const char* trax_image_get_path(trax_image* image);
+
+/**
+ * Releases region structure, frees allocated memory.
+**/
+__TRAX_EXPORT void trax_region_release(trax_region** region);
+
+/**
+ * Returns type identifier of the region object.
+**/
+__TRAX_EXPORT int trax_region_get_type(const trax_region* region);
+
+/**
+ * Creates a special region object. Only one paramter (region code) required.
+**/
+__TRAX_EXPORT trax_region* trax_region_create_special(int code);
+
+/**
+ * Sets the code of a special region.
+**/
+__TRAX_EXPORT void trax_region_set_special(trax_region* region, int code);
+
+/**
+ * Returns a code of a special region object.
+**/
+__TRAX_EXPORT int trax_region_get_special(const trax_region* region);
+
+/**
+ * Creates a rectangle region.
+**/
+__TRAX_EXPORT trax_region* trax_region_create_rectangle(float x, float y, float width, float height);
+
+/**
+ * Sets the coordinates for a rectangle region.
+**/
+__TRAX_EXPORT void trax_region_set_rectangle(trax_region* region, float x, float y, float width, float height);
+
+/**
+ * Retreives coordinate from a rectangle region object.
+**/
+__TRAX_EXPORT void trax_region_get_rectangle(const trax_region* region, float* x, float* y, float* width, float* height);
+
+/**
+ * Creates a polygon region object for a given amout of points. Note that the coordinates of the points
+ * are arbitrary and have to be set after allocation.
+**/
+__TRAX_EXPORT trax_region* trax_region_create_polygon(int count);
+
+/**
+ * Sets coordinates of a given point in the polygon.
+**/
+__TRAX_EXPORT void trax_region_set_polygon_point(trax_region* region, int index, float x, float y);
+
+/**
+ * Retrieves the coordinates of a specific point in the polygon.
+**/
+__TRAX_EXPORT void trax_region_get_polygon_point(const trax_region* region, int index, float* x, float* y);
+
+/**
+ * Returns the number of points in the polygon.
+**/
+__TRAX_EXPORT int trax_region_get_polygon_count(const trax_region* region);
+
+/**
+ * Creates a rectangle region object that bounds the input region (in case the input
+ * region is also a rectangle it just clones it).
+ **/
+__TRAX_EXPORT trax_region* trax_region_get_bounds(const trax_region* region);
+
+/**
+ * Destroy a properties object and clean up the memory.
+ **/
+__TRAX_EXPORT void trax_properties_release(trax_properties** properties);
+
+/**
+ * Clear a properties object.
+ **/
+__TRAX_EXPORT void trax_properties_clear(trax_prope
