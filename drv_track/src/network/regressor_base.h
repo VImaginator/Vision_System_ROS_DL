@@ -26,4 +26,11 @@ public:
   // Called at the beginning of tracking a new object to initialize the network.
   virtual void Init() { }
 
-  //virtual boost::shared
+  //virtual boost::shared_ptr<caffe::Net<float> > get_net() { return net_; }
+
+protected:
+  boost::shared_ptr<caffe::Net<float> > net_;
+
+};
+
+#endif // REGRESSOR_BASE_H
