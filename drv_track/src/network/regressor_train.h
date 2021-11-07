@@ -27,4 +27,13 @@ public:
   void set_test_net(const std::string& test_proto);
 
 private:
-  // Tr
+  // Train the network.
+  void Step();
+
+  // Set the ground-truth bounding boxes (for training).
+  void set_bboxes_gt(const std::vector<BoundingBox>& bboxes_gt);
+
+  boost::shared_ptr<caffe::Net<float> > test_net_;
+};
+
+#endif // REGRESSOR_TRAIN_H
