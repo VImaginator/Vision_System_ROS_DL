@@ -69,4 +69,28 @@ private:
   // To generate synethic examples, shift the bounding box by an exponential with the given lambda parameter.
   double lambda_shift_;
 
-  // To generate synethic examples, shift the bounding box by an expon
+  // To generate synethic examples, shift the bounding box by an exponential with the given lambda parameter.
+  double lambda_scale_;
+
+  // Do not scale the synthetic examples by more than max_scale_ shrink them by more than min_scale_.
+  double min_scale_;
+  double max_scale_;
+
+  // Current training image.
+  cv::Mat image_curr_;
+
+  // Location of the target within the current and previous images.
+  BoundingBox bbox_curr_gt_;
+  BoundingBox bbox_prev_gt_;
+
+  // Cropped and scaled image of the target object from the previous image.
+  cv::Mat target_pad_;
+
+  // Video and frame index from which the current example was generated.
+  // These values are only used when saving images to a file, to assign them
+  // a unique identifier.
+  int video_index_;
+  int frame_index_;
+};
+
+#endif // EXAMPLE_GENERATOR_H
