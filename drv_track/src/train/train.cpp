@@ -102,4 +102,64 @@ int main (int argc, char *argv[]) {
   ::google::InitGoogleLogging(argv[0]);
 
   int arg_index = 1;
-  const string& videos_folder_i
+  const string& videos_folder_imagenet      = argv[arg_index++];
+  const string& annotations_folder_imagenet = argv[arg_index++];
+  const string& alov_videos_folder      = argv[arg_index++];
+  const string& alov_annotations_folder = argv[arg_index++];
+  const string& caffe_model   = argv[arg_index++];
+  const string& train_proto   = argv[arg_index++];
+  const string& solver_file  = argv[arg_index++];
+  const double lambda_shift        = atof(argv[arg_index++]);
+  const double lambda_scale        = atof(argv[arg_index++]);
+  const double min_scale           = atof(argv[arg_index++]);
+  const double max_scale           = atof(argv[arg_index++]);
+  const int gpu_id          = atoi(argv[arg_index++]);
+  const int random_seed          = atoi(argv[arg_index++]);
+
+  caffe::Caffe::set_random_seed(random_seed);
+  printf("Using random seed: %d\n", random_seed);
+
+#ifdef CPU_ONLY
+  printf("Setting up Caffe in CPU mode\n");
+  caffe::Caffe::set_mode(caffe::Caffe::CPU);
+#else
+  printf("Setting up Caffe in GPU mode with ID: %d\n", gpu_id);
+  caffe::Caffe::set_mode(caffe::Caffe::GPU);
+  caffe::Caffe::SetDevice(gpu_id);
+#endif
+
+  // Load the image data.
+  LoaderImagenetDet image_loader(videos_folder_imagenet, annotations_folder_imagenet);
+  const std::vector<std::vector<Annotation> >& train_images = image_loader.get_images();
+  printf("Total training images: %zu\n", train_images.size());
+
+  // Load the video data.
+  LoaderAlov alov_video_loader(alov_videos_folder, alov_annotations_folder);
+  const bool get_train = true;
+  std::vector<Video> train_videos;
+  alov_video_loader.get_videos(get_train, &train_videos);
+  printf("Total training videos: %zu\n", train_videos.size());
+
+  // Create an ExampleGenerator to generate training examples.
+  ExampleGenerator example_generator(lambda_shift, lambda_scale,
+                                     min_scale, max_scale);
+
+  // Set up network.
+  RegressorTrain regressor_train(train_proto, caffe_model,
+                                 gpu_id, solver_file);
+
+  // Set up trainer.
+  TrackerTrainer tracker_trainer(&example_generator, &regressor_train);
+
+  // Train tracker.
+  while (tracker_trainer.get_num_batches() < kNumBatches) {
+    // Train on an image example.
+    train_image(image_loader, train_images, &tracker_trainer);
+
+    // Train on a video example.
+    train_video(train_videos, &tracker_trainer);
+  }
+
+  return 0;
+}
+
