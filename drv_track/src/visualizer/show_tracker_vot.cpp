@@ -1,3 +1,4 @@
+
 // Visualize the tracker performance.
 
 #include <string>
@@ -18,10 +19,10 @@ using std::string;
 const bool show_intermediate_output = false;
 
 int main (int argc, char *argv[]) {
-  if (argc < 5) {
+  if (argc < 4) {
     std::cerr << "Usage: " << argv[0]
-              << " deploy.prototxt network.caffemodel videos_folder annotations_folder"
-              << " [video_num] [pauseval] [gpu_id]" << std::endl;
+              << " deploy.prototxt network.caffemodel videos_folder"
+              << " [gpu_id] [video_num] [pauseval]" << std::endl;
     return 1;
   }
 
@@ -30,21 +31,20 @@ int main (int argc, char *argv[]) {
   const string& model_file   = argv[1];
   const string& trained_file = argv[2];
   const string& videos_folder = argv[3];
-  const string& annotations_folder = argv[4];
 
   int gpu_id = 0;
-  if (argc >= 6) {
-    gpu_id = atoi(argv[5]);
+  if (argc >= 5) {
+    gpu_id = atoi(argv[4]);
   }
 
   int start_video_num = 0;
-  if (argc >= 7) {
-    start_video_num = atoi(argv[6]);
+  if (argc >= 6) {
+    start_video_num = atoi(argv[5]);
   }
 
   int pause_val = 1;
-  if (argc >= 8) {
-    pause_val = atoi(argv[7]);
+  if (argc >= 7) {
+    pause_val = atoi(argv[6]);
   }
 
   // Set up the neural network.
@@ -54,10 +54,8 @@ int main (int argc, char *argv[]) {
   Tracker tracker(show_intermediate_output);
 
   // Get videos.
-  std::vector<Video> videos;
-  LoaderAlov loader(videos_folder, annotations_folder);
-  const bool get_train = false;
-  loader.get_videos(get_train, &videos);
+  LoaderVOT loader(videos_folder);
+  std::vector<Video> videos = loader.get_videos();
 
   // Visualize the tracker performance.
   TrackerVisualizer tracker_visualizer(videos, &regressor, &tracker);
