@@ -167,4 +167,112 @@ int getFeatureMaps(const IplImage* image, const int k, CvLSVMFeatureMapCaskade *
                 dotProd = boundary_x[kk] * x + boundary_y[kk] * y;
                 if (dotProd > max) 
                 {
-                    max  = 
+                    max  = dotProd;
+                    maxi = kk;
+                }
+                else 
+                {
+                    if (-dotProd > max) 
+                    {
+                        max  = -dotProd;
+                        maxi = kk + NUM_SECTOR;
+                    }
+                }
+            }
+            alfa[j * width * 2 + i * 2    ] = maxi % NUM_SECTOR;
+            alfa[j * width * 2 + i * 2 + 1] = maxi;  
+        }/*for(i = 0; i < width; i++)*/
+    }/*for(j = 0; j < height; j++)*/
+
+    nearest = (int  *)malloc(sizeof(int  ) *  k);
+    w       = (float*)malloc(sizeof(float) * (k * 2));
+    
+    for(i = 0; i < k / 2; i++)
+    {
+        nearest[i] = -1;
+    }/*for(i = 0; i < k / 2; i++)*/
+    for(i = k / 2; i < k; i++)
+    {
+        nearest[i] = 1;
+    }/*for(i = k / 2; i < k; i++)*/
+
+    for(j = 0; j < k / 2; j++)
+    {
+        b_x = k / 2 + j + 0.5f;
+        a_x = k / 2 - j - 0.5f;
+        w[j * 2    ] = 1.0f/a_x * ((a_x * b_x) / ( a_x + b_x)); 
+        w[j * 2 + 1] = 1.0f/b_x * ((a_x * b_x) / ( a_x + b_x));  
+    }/*for(j = 0; j < k / 2; j++)*/
+    for(j = k / 2; j < k; j++)
+    {
+        a_x = j - k / 2 + 0.5f;
+        b_x =-j + k / 2 - 0.5f + k;
+        w[j * 2    ] = 1.0f/a_x * ((a_x * b_x) / ( a_x + b_x)); 
+        w[j * 2 + 1] = 1.0f/b_x * ((a_x * b_x) / ( a_x + b_x));  
+    }/*for(j = k / 2; j < k; j++)*/
+
+    for(i = 0; i < sizeY; i++)
+    {
+      for(j = 0; j < sizeX; j++)
+      {
+        for(ii = 0; ii < k; ii++)
+        {
+          for(jj = 0; jj < k; jj++)
+          {
+            if ((i * k + ii > 0) && 
+                (i * k + ii < height - 1) && 
+                (j * k + jj > 0) && 
+                (j * k + jj < width  - 1))
+            {
+              d = (k * i + ii) * width + (j * k + jj);
+              (*map)->map[ i * stringSize + j * (*map)->numFeatures + alfa[d * 2    ]] += 
+                  r[d] * w[ii * 2] * w[jj * 2];
+              (*map)->map[ i * stringSize + j * (*map)->numFeatures + alfa[d * 2 + 1] + NUM_SECTOR] += 
+                  r[d] * w[ii * 2] * w[jj * 2];
+              if ((i + nearest[ii] >= 0) && 
+                  (i + nearest[ii] <= sizeY - 1))
+              {
+                (*map)->map[(i + nearest[ii]) * stringSize + j * (*map)->numFeatures + alfa[d * 2    ]             ] += 
+                  r[d] * w[ii * 2 + 1] * w[jj * 2 ];
+                (*map)->map[(i + nearest[ii]) * stringSize + j * (*map)->numFeatures + alfa[d * 2 + 1] + NUM_SECTOR] += 
+                  r[d] * w[ii * 2 + 1] * w[jj * 2 ];
+              }
+              if ((j + nearest[jj] >= 0) && 
+                  (j + nearest[jj] <= sizeX - 1))
+              {
+                (*map)->map[i * stringSize + (j + nearest[jj]) * (*map)->numFeatures + alfa[d * 2    ]             ] += 
+                  r[d] * w[ii * 2] * w[jj * 2 + 1];
+                (*map)->map[i * stringSize + (j + nearest[jj]) * (*map)->numFeatures + alfa[d * 2 + 1] + NUM_SECTOR] += 
+                  r[d] * w[ii * 2] * w[jj * 2 + 1];
+              }
+              if ((i + nearest[ii] >= 0) && 
+                  (i + nearest[ii] <= sizeY - 1) && 
+                  (j + nearest[jj] >= 0) && 
+                  (j + nearest[jj] <= sizeX - 1))
+              {
+                (*map)->map[(i + nearest[ii]) * stringSize + (j + nearest[jj]) * (*map)->numFeatures + alfa[d * 2    ]             ] += 
+                  r[d] * w[ii * 2 + 1] * w[jj * 2 + 1];
+                (*map)->map[(i + nearest[ii]) * stringSize + (j + nearest[jj]) * (*map)->numFeatures + alfa[d * 2 + 1] + NUM_SECTOR] += 
+                  r[d] * w[ii * 2 + 1] * w[jj * 2 + 1];
+              }
+            }
+          }/*for(jj = 0; jj < k; jj++)*/
+        }/*for(ii = 0; ii < k; ii++)*/
+      }/*for(j = 1; j < sizeX - 1; j++)*/
+    }/*for(i = 1; i < sizeY - 1; i++)*/
+    
+    cvReleaseImage(&dx);
+    cvReleaseImage(&dy);
+
+
+    free(w);
+    free(nearest);
+    
+    free(r);
+    free(alfa);
+
+    return LATENT_SVM_OK;
+}
+
+/*
+// Feature map Normalizati
