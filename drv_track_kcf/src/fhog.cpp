@@ -275,4 +275,110 @@ int getFeatureMaps(const IplImage* image, const int k, CvLSVMFeatureMapCaskade *
 }
 
 /*
-// Feature map Normalizati
+// Feature map Normalization and Truncation 
+//
+// API
+// int normalizeAndTruncate(featureMap *map, const float alfa);
+// INPUT
+// map               - feature map
+// alfa              - truncation threshold
+// OUTPUT
+// map               - truncated and normalized feature map
+// RESULT
+// Error status
+*/
+int normalizeAndTruncate(CvLSVMFeatureMapCaskade *map, const float alfa)
+{
+    int i,j, ii;
+    int sizeX, sizeY, p, pos, pp, xp, pos1, pos2;
+    float * partOfNorm; // norm of C(i, j)
+    float * newData;
+    float   valOfNorm;
+
+    sizeX     = map->sizeX;
+    sizeY     = map->sizeY;
+    partOfNorm = (float *)malloc (sizeof(float) * (sizeX * sizeY));
+
+    p  = NUM_SECTOR;
+    xp = NUM_SECTOR * 3;
+    pp = NUM_SECTOR * 12;
+
+    for(i = 0; i < sizeX * sizeY; i++)
+    {
+        valOfNorm = 0.0f;
+        pos = i * map->numFeatures;
+        for(j = 0; j < p; j++)
+        {
+            valOfNorm += map->map[pos + j] * map->map[pos + j];
+        }/*for(j = 0; j < p; j++)*/
+        partOfNorm[i] = valOfNorm;
+    }/*for(i = 0; i < sizeX * sizeY; i++)*/
+    
+    sizeX -= 2;
+    sizeY -= 2;
+
+    newData = (float *)malloc (sizeof(float) * (sizeX * sizeY * pp));
+//normalization
+    for(i = 1; i <= sizeY; i++)
+    {
+        for(j = 1; j <= sizeX; j++)
+        {
+            valOfNorm = sqrtf(
+                partOfNorm[(i    )*(sizeX + 2) + (j    )] +
+                partOfNorm[(i    )*(sizeX + 2) + (j + 1)] +
+                partOfNorm[(i + 1)*(sizeX + 2) + (j    )] +
+                partOfNorm[(i + 1)*(sizeX + 2) + (j + 1)]) + FLT_EPSILON;
+            pos1 = (i  ) * (sizeX + 2) * xp + (j  ) * xp;
+            pos2 = (i-1) * (sizeX    ) * pp + (j-1) * pp;
+            for(ii = 0; ii < p; ii++)
+            {
+                newData[pos2 + ii        ] = map->map[pos1 + ii    ] / valOfNorm;
+            }/*for(ii = 0; ii < p; ii++)*/
+            for(ii = 0; ii < 2 * p; ii++)
+            {
+                newData[pos2 + ii + p * 4] = map->map[pos1 + ii + p] / valOfNorm;
+            }/*for(ii = 0; ii < 2 * p; ii++)*/
+            valOfNorm = sqrtf(
+                partOfNorm[(i    )*(sizeX + 2) + (j    )] +
+                partOfNorm[(i    )*(sizeX + 2) + (j + 1)] +
+                partOfNorm[(i - 1)*(sizeX + 2) + (j    )] +
+                partOfNorm[(i - 1)*(sizeX + 2) + (j + 1)]) + FLT_EPSILON;
+            for(ii = 0; ii < p; ii++)
+            {
+                newData[pos2 + ii + p    ] = map->map[pos1 + ii    ] / valOfNorm;
+            }/*for(ii = 0; ii < p; ii++)*/
+            for(ii = 0; ii < 2 * p; ii++)
+            {
+                newData[pos2 + ii + p * 6] = map->map[pos1 + ii + p] / valOfNorm;
+            }/*for(ii = 0; ii < 2 * p; ii++)*/
+            valOfNorm = sqrtf(
+                partOfNorm[(i    )*(sizeX + 2) + (j    )] +
+                partOfNorm[(i    )*(sizeX + 2) + (j - 1)] +
+                partOfNorm[(i + 1)*(sizeX + 2) + (j    )] +
+                partOfNorm[(i + 1)*(sizeX + 2) + (j - 1)]) + FLT_EPSILON;
+            for(ii = 0; ii < p; ii++)
+            {
+                newData[pos2 + ii + p * 2] = map->map[pos1 + ii    ] / valOfNorm;
+            }/*for(ii = 0; ii < p; ii++)*/
+            for(ii = 0; ii < 2 * p; ii++)
+            {
+                newData[pos2 + ii + p * 8] = map->map[pos1 + ii + p] / valOfNorm;
+            }/*for(ii = 0; ii < 2 * p; ii++)*/
+            valOfNorm = sqrtf(
+                partOfNorm[(i    )*(sizeX + 2) + (j    )] +
+                partOfNorm[(i    )*(sizeX + 2) + (j - 1)] +
+                partOfNorm[(i - 1)*(sizeX + 2) + (j    )] +
+                partOfNorm[(i - 1)*(sizeX + 2) + (j - 1)]) + FLT_EPSILON;
+            for(ii = 0; ii < p; ii++)
+            {
+                newData[pos2 + ii + p * 3 ] = map->map[pos1 + ii    ] / valOfNorm;
+            }/*for(ii = 0; ii < p; ii++)*/
+            for(ii = 0; ii < 2 * p; ii++)
+            {
+                newData[pos2 + ii + p * 10] = map->map[pos1 + ii + p] / valOfNorm;
+            }/*for(ii = 0; ii < 2 * p; ii++)*/
+        }/*for(j = 1; j <= sizeX; j++)*/
+    }/*for(i = 1; i <= sizeY; i++)*/
+//truncation
+    for(i = 0; i < sizeX * sizeY * pp; i++)
+ 
