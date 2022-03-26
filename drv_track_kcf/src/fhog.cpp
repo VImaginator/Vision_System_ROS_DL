@@ -381,4 +381,131 @@ int normalizeAndTruncate(CvLSVMFeatureMapCaskade *map, const float alfa)
     }/*for(i = 1; i <= sizeY; i++)*/
 //truncation
     for(i = 0; i < sizeX * sizeY * pp; i++)
- 
+    {
+        if(newData [i] > alfa) newData [i] = alfa;
+    }/*for(i = 0; i < sizeX * sizeY * pp; i++)*/
+//swop data
+
+    map->numFeatures  = pp;
+    map->sizeX = sizeX;
+    map->sizeY = sizeY;
+
+    free (map->map);
+    free (partOfNorm);
+
+    map->map = newData;
+
+    return LATENT_SVM_OK;
+}
+/*
+// Feature map reduction
+// In each cell we reduce dimension of the feature vector
+// according to original paper special procedure
+//
+// API
+// int PCAFeatureMaps(featureMap *map)
+// INPUT
+// map               - feature map
+// OUTPUT
+// map               - feature map
+// RESULT
+// Error status
+*/
+int PCAFeatureMaps(CvLSVMFeatureMapCaskade *map)
+{ 
+    int i,j, ii, jj, k;
+    int sizeX, sizeY, p,  pp, xp, yp, pos1, pos2;
+    float * newData;
+    float val;
+    float nx, ny;
+    
+    sizeX = map->sizeX;
+    sizeY = map->sizeY;
+    p     = map->numFeatures;
+    pp    = NUM_SECTOR * 3 + 4;
+    yp    = 4;
+    xp    = NUM_SECTOR;
+
+    nx    = 1.0f / sqrtf((float)(xp * 2));
+    ny    = 1.0f / sqrtf((float)(yp    ));
+
+    newData = (float *)malloc (sizeof(float) * (sizeX * sizeY * pp));
+
+    for(i = 0; i < sizeY; i++)
+    {
+        for(j = 0; j < sizeX; j++)
+        {
+            pos1 = ((i)*sizeX + j)*p;
+            pos2 = ((i)*sizeX + j)*pp;
+            k = 0;
+            for(jj = 0; jj < xp * 2; jj++)
+            {
+                val = 0;
+                for(ii = 0; ii < yp; ii++)
+                {
+                    val += map->map[pos1 + yp * xp + ii * xp * 2 + jj];
+                }/*for(ii = 0; ii < yp; ii++)*/
+                newData[pos2 + k] = val * ny;
+                k++;
+            }/*for(jj = 0; jj < xp * 2; jj++)*/
+            for(jj = 0; jj < xp; jj++)
+            {
+                val = 0;
+                for(ii = 0; ii < yp; ii++)
+                {
+                    val += map->map[pos1 + ii * xp + jj];
+                }/*for(ii = 0; ii < yp; ii++)*/
+                newData[pos2 + k] = val * ny;
+                k++;
+            }/*for(jj = 0; jj < xp; jj++)*/
+            for(ii = 0; ii < yp; ii++)
+            {
+                val = 0;
+                for(jj = 0; jj < 2 * xp; jj++)
+                {
+                    val += map->map[pos1 + yp * xp + ii * xp * 2 + jj];
+                }/*for(jj = 0; jj < xp; jj++)*/
+                newData[pos2 + k] = val * nx;
+                k++;
+            } /*for(ii = 0; ii < yp; ii++)*/           
+        }/*for(j = 0; j < sizeX; j++)*/
+    }/*for(i = 0; i < sizeY; i++)*/
+//swop data
+
+    map->numFeatures = pp;
+
+    free (map->map);
+
+    map->map = newData;
+
+    return LATENT_SVM_OK;
+}
+
+
+//modified from "lsvmc_routine.cpp"
+
+int allocFeatureMapObject(CvLSVMFeatureMapCaskade **obj, const int sizeX, 
+                          const int sizeY, const int numFeatures)
+{
+    int i;
+    (*obj) = (CvLSVMFeatureMapCaskade *)malloc(sizeof(CvLSVMFeatureMapCaskade));
+    (*obj)->sizeX       = sizeX;
+    (*obj)->sizeY       = sizeY;
+    (*obj)->numFeatures = numFeatures;
+    (*obj)->map = (float *) malloc(sizeof (float) * 
+                                  (sizeX * sizeY  * numFeatures));
+    for(i = 0; i < sizeX * sizeY * numFeatures; i++)
+    {
+        (*obj)->map[i] = 0.0f;
+    }
+    return LATENT_SVM_OK;
+}
+
+int freeFeatureMapObject (CvLSVMFeatureMapCaskade **obj)
+{
+    if(*obj == NULL) return LATENT_SVM_MEM_NULL;
+    free((*obj)->map);
+    free(*obj);
+    (*obj) = NULL;
+    return LATENT_SVM_OK;
+}
