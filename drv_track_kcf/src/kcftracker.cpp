@@ -110,4 +110,142 @@ KCFTracker::KCFTracker(bool hog, bool fixed_window, bool multiscale, bool lab)
     if (lab) {
       interp_factor = 0.005;
       sigma = 0.4;
-      //output_sigma
+      //output_sigma_factor = 0.025;
+      output_sigma_factor = 0.1;
+
+      _labfeatures = true;
+      _labCentroids = cv::Mat(nClusters, 3, CV_32FC1, &data);
+      cell_sizeQ = cell_size*cell_size;
+    }
+    else{
+      _labfeatures = false;
+    }
+  }
+  else { // RAW
+    interp_factor = 0.075;
+    sigma = 0.2;
+    cell_size = 1;
+    _hogfeatures = false;
+
+    if (lab) {
+      printf("Lab features are only used with HOG features.\n");
+      _labfeatures = false;
+    }
+  }
+
+  if (multiscale) { // multiscale
+    template_size = 96;
+    //template_size = 100;
+    scale_step = 1.05;
+    scale_weight = 0.95;
+    if (!fixed_window) {
+      //printf("Multiscale does not support non-fixed window.\n");
+      fixed_window = true;
+    }
+  }
+  else if (fixed_window) {  // fit correction without multiscale
+    template_size = 96;
+    //template_size = 100;
+    scale_step = 1;
+  }
+  else {
+    template_size = 1;
+    scale_step = 1;
+  }
+
+  initialized_ = false;
+}
+
+// Initialize tracker 
+void KCFTracker::init(const cv::Rect &roi, cv::Mat image)
+{
+  _roi = roi;
+  assert(roi.width >= 0 && roi.height >= 0);
+  _tmpl = getFeatures(image, 1);
+  _prob = createGaussianPeak(size_patch[0], size_patch[1]);
+  _alphaf = cv::Mat(size_patch[0], size_patch[1], CV_32FC2, float(0));
+  //_num = cv::Mat(size_patch[0], size_patch[1], CV_32FC2, float(0));
+  //_den = cv::Mat(size_patch[0], size_patch[1], CV_32FC2, float(0));
+  train(_tmpl, 1.0); // train with initial frame
+}
+
+// Update position based on the new frame
+cv::Rect KCFTracker::update(cv::Mat image)
+{
+  if (_roi.x + _roi.width <= 0) _roi.x = -_roi.width + 1;
+  if (_roi.y + _roi.height <= 0) _roi.y = -_roi.height + 1;
+  if (_roi.x >= image.cols - 1) _roi.x = image.cols - 2;
+  if (_roi.y >= image.rows - 1) _roi.y = image.rows - 2;
+
+  float cx = _roi.x + _roi.width / 2.0f;
+  float cy = _roi.y + _roi.height / 2.0f;
+
+
+  float peak_value;
+  cv::Point2f res = detect(_tmpl, getFeatures(image, 0, 1.0f), peak_value);
+
+  if (scale_step != 1) {
+    // Test at a smaller _scale
+    float new_peak_value;
+    cv::Point2f new_res = detect(_tmpl, getFeatures(image, 0, 1.0f / scale_step), new_peak_value);
+
+    if (scale_weight * new_peak_value > peak_value) {
+      res = new_res;
+      peak_value = new_peak_value;
+      _scale /= scale_step;
+      _roi.width /= scale_step;
+      _roi.height /= scale_step;
+    }
+
+    // Test at a bigger _scale
+    new_res = detect(_tmpl, getFeatures(image, 0, scale_step), new_peak_value);
+
+    if (scale_weight * new_peak_value > peak_value) {
+      res = new_res;
+      peak_value = new_peak_value;
+      _scale *= scale_step;
+      _roi.width *= scale_step;
+      _roi.height *= scale_step;
+    }
+  }
+
+  // Adjust by cell size and _scale
+  _roi.x = cx - _roi.width / 2.0f + ((float) res.x * cell_size * _scale);
+  _roi.y = cy - _roi.height / 2.0f + ((float) res.y * cell_size * _scale);
+
+  if (_roi.x >= image.cols - 1) _roi.x = image.cols - 1;
+  if (_roi.y >= image.rows - 1) _roi.y = image.rows - 1;
+  if (_roi.x + _roi.width <= 0) _roi.x = -_roi.width + 2;
+  if (_roi.y + _roi.height <= 0) _roi.y = -_roi.height + 2;
+
+  assert(_roi.width >= 0 && _roi.height >= 0);
+  cv::Mat x = getFeatures(image, 0);
+  train(x, interp_factor);
+
+  return _roi;
+}
+
+
+// Detect object in the current frame.
+cv::Point2f KCFTracker::detect(cv::Mat z, cv::Mat x, float &peak_value)
+{
+  using namespace FFTTools;
+
+  cv::Mat k = gaussianCorrelation(x, z);
+  cv::Mat res = (real(fftd(complexMultiplication(_alphaf, fftd(k)), true)));
+
+  //minMaxLoc only accepts doubles for the peak, and integer points for the coordinates
+  cv::Point2i pi;
+  double pv;
+  cv::minMaxLoc(res, NULL, &pv, NULL, &pi);
+  peak_value = (float) pv;
+
+  //subpixel peak estimation, coordinates will be non-integer
+  cv::Point2f p((float)pi.x, (float)pi.y);
+
+  if (pi.x > 0 && pi.x < res.cols-1) {
+    p.x += subPixelPeak(res.at<float>(pi.y, pi.x-1), peak_value, res.at<float>(pi.y, pi.x+1));
+  }
+
+  if (pi.y > 0 && pi.y < res.rows-1) {
+    p.y += subPixelPeak(res.at<float>(pi.y-1, pi.x), peak_value, res.at<float>(pi.y+1, pi.
