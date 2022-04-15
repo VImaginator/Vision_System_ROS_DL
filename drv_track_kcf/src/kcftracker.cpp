@@ -248,4 +248,137 @@ cv::Point2f KCFTracker::detect(cv::Mat z, cv::Mat x, float &peak_value)
   }
 
   if (pi.y > 0 && pi.y < res.rows-1) {
-    p.y += subPixelPeak(res.at<float>(pi.y-1, pi.x), peak_value, res.at<float>(pi.y+1, pi.
+    p.y += subPixelPeak(res.at<float>(pi.y-1, pi.x), peak_value, res.at<float>(pi.y+1, pi.x));
+  }
+
+  p.x -= (res.cols) / 2;
+  p.y -= (res.rows) / 2;
+
+  return p;
+}
+
+// train tracker with a single image
+void KCFTracker::train(cv::Mat x, float train_interp_factor)
+{
+  using namespace FFTTools;
+
+  cv::Mat k = gaussianCorrelation(x, x);
+  cv::Mat alphaf = complexDivision(_prob, (fftd(k) + lambda));
+
+  _tmpl = (1 - train_interp_factor) * _tmpl + (train_interp_factor) * x;
+  _alphaf = (1 - train_interp_factor) * _alphaf + (train_interp_factor) * alphaf;
+
+
+  /*cv::Mat kf = fftd(gaussianCorrelation(x, x));
+    cv::Mat num = complexMultiplication(kf, _prob);
+    cv::Mat den = complexMultiplication(kf, kf + lambda);
+    
+    _tmpl = (1 - train_interp_factor) * _tmpl + (train_interp_factor) * x;
+    _num = (1 - train_interp_factor) * _num + (train_interp_factor) * num;
+    _den = (1 - train_interp_factor) * _den + (train_interp_factor) * den;
+
+    _alphaf = complexDivision(_num, _den);*/
+
+}
+
+// Evaluates a Gaussian kernel with bandwidth SIGMA for all relative shifts 
+// between input images X and Y, which must both be MxN. 
+// They must also be periodic (ie., pre-processed with a cosine window).
+cv::Mat KCFTracker::gaussianCorrelation(cv::Mat x1, cv::Mat x2)
+{
+  using namespace FFTTools;
+  cv::Mat c = cv::Mat( cv::Size(size_patch[1], size_patch[0]), CV_32F, cv::Scalar(0) );
+  // HOG features
+  if (_hogfeatures) {
+    cv::Mat caux;
+    cv::Mat x1aux;
+    cv::Mat x2aux;
+    for (int i = 0; i < size_patch[2]; i++) {
+      x1aux = x1.row(i);   // Procedure do deal with cv::Mat multichannel bug
+      x1aux = x1aux.reshape(1, size_patch[0]);
+      x2aux = x2.row(i).reshape(1, size_patch[0]);
+      cv::mulSpectrums(fftd(x1aux), fftd(x2aux), caux, 0, true);
+      caux = fftd(caux, true);
+      rearrange(caux);
+      caux.convertTo(caux,CV_32F);
+      c = c + real(caux);
+    }
+  }
+  // Gray features
+  else {
+    cv::mulSpectrums(fftd(x1), fftd(x2), c, 0, true);
+    c = fftd(c, true);
+    rearrange(c);
+    c = real(c);
+  }
+  cv::Mat d;
+  cv::max(((cv::sum(x1.mul(x1))[0] + cv::sum(x2.mul(x2))[0])- 2. * c) / 
+          (size_patch[0]*size_patch[1]*size_patch[2]) , 0, d);
+
+  cv::Mat k;
+  cv::exp((-d / (sigma * sigma)), k);
+  return k;
+}
+
+// Create Gaussian Peak. Function called only in the first frame.
+cv::Mat KCFTracker::createGaussianPeak(int sizey, int sizex)
+{
+  cv::Mat_<float> res(sizey, sizex);
+
+  int syh = (sizey) / 2;
+  int sxh = (sizex) / 2;
+
+  float output_sigma = std::sqrt((float) sizex * sizey) / padding * output_sigma_factor;
+  float mult = -0.5 / (output_sigma * output_sigma);
+
+  for (int i = 0; i < sizey; i++)
+    for (int j = 0; j < sizex; j++)
+    {
+      int ih = i - syh;
+      int jh = j - sxh;
+      res(i, j) = std::exp(mult * (float) (ih * ih + jh * jh));
+    }
+  return FFTTools::fftd(res);
+}
+
+// Obtain sub-window from image, with replication-padding and extract features
+cv::Mat KCFTracker::getFeatures(const cv::Mat & image, bool inithann, float scale_adjust)
+{
+  cv::Rect extracted_roi;
+
+  float cx = _roi.x + _roi.width / 2;
+  float cy = _roi.y + _roi.height / 2;
+
+  if (inithann) {
+    int padded_w = _roi.width * padding;
+    int padded_h = _roi.height * padding;
+
+    if (template_size > 1) {  // Fit largest dimension to the given template size
+      if (padded_w >= padded_h)  //fit to width
+        _scale = padded_w / (float) template_size;
+      else
+        _scale = padded_h / (float) template_size;
+
+      _tmpl_sz.width = padded_w / _scale;
+      _tmpl_sz.height = padded_h / _scale;
+    }
+    else {  //No template size given, use ROI size
+      _tmpl_sz.width = padded_w;
+      _tmpl_sz.height = padded_h;
+      _scale = 1;
+      // original code from paper:
+      /*if (sqrt(padded_w * padded_h) >= 100) {   //Normal size
+                _tmpl_sz.width = padded_w;
+                _tmpl_sz.height = padded_h;
+                _scale = 1;
+            }
+            else {   //ROI is too big, track at half size
+                _tmpl_sz.width = padded_w / 2;
+                _tmpl_sz.height = padded_h / 2;
+                _scale = 2;
+            }*/
+    }
+
+    if (_hogfeatures) {
+      // Round to cell size and also make it even
+      _tmpl_sz.width = ( ( (int)(_tmpl_sz.width / (2 * cell_size)) ) * 2 * cell
