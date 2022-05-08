@@ -491,4 +491,33 @@ void KCFTracker::createHanningMats()
   for (int i = 0; i < hann1t.cols; i++)
     hann1t.at<float > (0, i) = 0.5 * (1 - std::cos(2 * 3.14159265358979323846 * i / (hann1t.cols - 1)));
   for (int i = 0; i < hann2t.rows; i++)
-    hann2t.at<float > (i, 0) = 0.5 * (1 - std::cos
+    hann2t.at<float > (i, 0) = 0.5 * (1 - std::cos(2 * 3.14159265358979323846 * i / (hann2t.rows - 1)));
+
+  cv::Mat hann2d = hann2t * hann1t;
+  // HOG features
+  if (_hogfeatures) {
+    cv::Mat hann1d = hann2d.reshape(1,1); // Procedure do deal with cv::Mat multichannel bug
+
+    hann = cv::Mat(cv::Size(size_patch[0]*size_patch[1], size_patch[2]), CV_32F, cv::Scalar(0));
+    for (int i = 0; i < size_patch[2]; i++) {
+      for (int j = 0; j<size_patch[0]*size_patch[1]; j++) {
+        hann.at<float>(i,j) = hann1d.at<float>(0,j);
+      }
+    }
+  }
+  // Gray features
+  else {
+    hann = hann2d;
+  }
+}
+
+// Calculate sub-pixel peak for one dimension
+float KCFTracker::subPixelPeak(float left, float center, float right)
+{   
+  float divisor = 2 * center - right - left;
+
+  if (divisor == 0)
+    return 0;
+
+  return 0.5 * (right - left) / divisor;
+}
